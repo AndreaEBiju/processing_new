@@ -71,7 +71,13 @@ function plotAveragedMetrics()
 
     %% ---- render ----
     try
-        pubfig_setup('Theme','light');
+        % Presentation-grade defaults — fonts and lines are larger so the
+        % saved PNG/SVG read clearly when dropped into PowerPoint or
+        % shrunk into a paper figure. Override per-call below if needed.
+        pubfig_setup('Theme','light', ...
+            'BaseFontSize', 16, ...
+            'LineWidth',    2.0, ...
+            'MarkerSize',   12);
     catch ME
         warning('pubfig_setup failed: %s', ME.message);
     end
@@ -343,9 +349,10 @@ function figH = renderMetricGroupFigure(state, animalsAll, conds, spec, groupIdx
     dispLab = displayLabel(spec);
     figName = sprintf('group%d - %s', groupIdx, dispLab);
     % Force normal window state — pubfig_setup defaults to 'maximized'
-    % which would stack 88 figures on top of each other.
+    % which would stack 88 figures on top of each other. Size chosen
+    % so the larger presentation-grade fonts breathe.
     figH = figure('Name', figName, 'WindowState','normal', ...
-        'Position',[100 100 900 560]);
+        'Position',[100 100 1100 700]);
 
     if all(cellfun(@(c) all(isnan(c(:))), data(:)))
         text(0.5, 0.5, sprintf('no data for group %d / %s', groupIdx, dispLab), ...
@@ -363,7 +370,8 @@ function figH = renderMetricGroupFigure(state, animalsAll, conds, spec, groupIdx
         'Title',          sprintf('%s — group %d', dispLab, groupIdx), ...
         'ColorBySubject', true, ...
         'ConnectPaired',  true, ...
-        'PairLineStyle',  ':');
+        'PairLineStyle',  ':', ...
+        'MarkerSize',     110);
 end
 
 
