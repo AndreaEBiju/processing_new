@@ -81,6 +81,7 @@ function [values, hitCount, loadCount] = loadAllMetricsCached(state, metricSpecs
     wb = waitbar(0, sprintf('Loading %d file(s)  (%d values)...', nF, loadCount), ...
         'Name','plotAveragedMetrics: loading');
     try, set(wb,'WindowState','normal'); catch, end %#ok<CTCH>
+    setWaitbarInterpNone(wb);                 % file paths contain \ and _
     cleanup = onCleanup(@() safeCloseWb(wb)); %#ok<NASGU>
 
     % ----- start parpool if requested + available -----
@@ -193,6 +194,18 @@ end
 function safeCloseWb(wb)
     try
         if ishandle(wb), close(wb); end
+    catch
+    end
+end
+
+function setWaitbarInterpNone(wb)
+% Force the waitbar's message text to render literally — file paths
+% contain \ and _ which the LaTeX interpreter (pubfig_setup default)
+% otherwise parses as escape sequences / subscripts.
+    try
+        ax  = findall(wb, 'Type','axes');
+        txt = findall(ax, 'Type','text');
+        if ~isempty(txt), set(txt, 'Interpreter','none'); end
     catch
     end
 end

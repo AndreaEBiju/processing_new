@@ -82,6 +82,10 @@ function plotAveragedMetrics()
     wbR = waitbar(0, 'Rendering plots...', ...
         'Name','plotAveragedMetrics: rendering');
     try, set(wbR,'WindowState','normal'); catch, end %#ok<CTCH>
+    try
+        ax_ = findall(wbR,'Type','axes');
+        set(findall(ax_,'Type','text'),'Interpreter','none');
+    catch, end %#ok<CTCH>
     step = 0;
     try
         for k = 1:nMetrics
@@ -262,11 +266,15 @@ function renderMetricGroupFigure(state, animalsAll, conds, spec, groupIdx, value
     end
 
     figName = sprintf('group%d - %s', groupIdx, spec.label);
-    figure('Name', figName);
+    % Force normal window state — pubfig_setup defaults to 'maximized'
+    % which would stack 88 figures on top of each other.
+    figure('Name', figName, 'WindowState','normal', ...
+        'Position',[100 100 900 560]);
 
     if all(cellfun(@(c) all(isnan(c(:))), data(:)))
         text(0.5, 0.5, sprintf('no data for group %d / %s', groupIdx, spec.label), ...
-            'HorizontalAlignment','center','Units','normalized');
+            'HorizontalAlignment','center','Units','normalized', ...
+            'Interpreter','none');
         axis off;
         return;
     end

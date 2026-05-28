@@ -300,14 +300,18 @@ else
     set(ax,'XTickLabel', arrayfun(@(k)sprintf('%d',k), 1:G,'uni',0));
 end
 
-if ~isempty(opt.XLabel), xlabel(ax, char(opt.XLabel)); end
-if ~isempty(opt.YLabel), ylabel(ax, char(opt.YLabel)); end
-if ~isempty(opt.Title),  title (ax, char(opt.Title));  end
+% Force literal interpretation on tick labels (group names may contain
+% '_' or '%' which LaTeX would mangle if pubfig_setup set that default).
+try, set(ax, 'TickLabelInterpreter','none'); catch, end %#ok<CTCH>
+
+if ~isempty(opt.XLabel), xlabel(ax, char(opt.XLabel), 'Interpreter','none'); end
+if ~isempty(opt.YLabel), ylabel(ax, char(opt.YLabel), 'Interpreter','none'); end
+if ~isempty(opt.Title),  title (ax, char(opt.Title), 'Interpreter','none'); end
 
 % legend
 showLeg = strcmpi(opt.Legend,'on') || (strcmpi(opt.Legend,'auto') && S > 1);
 if showLeg
-    legend(ax,'show','Location','best');
+    legend(ax,'show','Location','best','Interpreter','none');
 end
 
 if ~holdState, hold(ax,'off'); end
