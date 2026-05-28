@@ -340,7 +340,13 @@ function [ani, cond, ph] = parseFilename(filename)
     end
 
     % phase
-    if contains(base, 'recovery', 'IgnoreCase', true)
+    %   'recovery' if the file contains 'recovery' OR 'stim_rec'
+    %   (batch_process splits a stim_rec recording into a stim and a
+    %   recovery slice; the analyzed slice is the recovery one).
+    %   'baseline' if 'baseline' or a clean '_bl_' token.
+    %   Defaults to 'baseline' for anything else.
+    if contains(base, 'recovery', 'IgnoreCase', true) || ...
+       contains(base, 'stim_rec', 'IgnoreCase', true)
         ph = 'recovery';
     elseif contains(base, 'baseline','IgnoreCase', true) || ...
            ~isempty(regexp(base, '(^|_)bl(_|$)', 'once'))
