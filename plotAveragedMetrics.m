@@ -79,6 +79,17 @@ function plotAveragedMetrics()
     animalsAll = uniqueStable(state.animal);
     totalSteps = nMetrics * numel(groups);
 
+    %% ---- ask for save folder (cancel = don't save) ----
+    saveDir = uigetdir(pwd, ...
+        'Pick a folder to save every figure (.fig/.png/.svg). Cancel = display only.');
+    if isequal(saveDir, 0)
+        saveDir = '';
+        fprintf('[plotAveragedMetrics] Save cancelled — figures will be displayed but not written to disk.\n');
+    else
+        if ~exist(saveDir, 'dir'), mkdir(saveDir); end
+        fprintf('[plotAveragedMetrics] Saving figures to: %s\n', saveDir);
+    end
+
     wbR = waitbar(0, 'Rendering plots...', ...
         'Name','plotAveragedMetrics: rendering');
     try, set(wbR,'WindowState','normal'); catch, end %#ok<CTCH>
@@ -93,12 +104,16 @@ function plotAveragedMetrics()
             for gi = 1:numel(groups)
                 step = step + 1;
                 if ishandle(wbR)
-                    waitbar(step/totalSteps, wbR, sprintf( ...
-                        '[%d / %d]  %s — group %d', ...
-                        step, totalSteps, spec.label, gi));
+                    msg = sprintf('[%d / %d]  %s — group %d', ...
+                        step, totalSteps, spec.label, gi);
+                    if ~isempty(saveDir), msg = [msg ' (saving)']; end %#ok<AGROW>
+                    waitbar(step/totalSteps, wbR, msg);
                 end
-                renderMetricGroupFigure(state, animalsAll, groups{gi}, ...
+                figH = renderMetricGroupFigure(state, animalsAll, groups{gi}, ...
                     spec, gi, values(:,k));
+                if ~isempty(saveDir) && ~isempty(figH) && ishandle(figH)
+                    saveFigureAllFormats(figH, saveDir);
+                end
             end
         end
     catch ME
@@ -106,6 +121,9 @@ function plotAveragedMetrics()
         rethrow(ME);
     end
     if ishandle(wbR), close(wbR); end
+    if ~isempty(saveDir)
+        fprintf('[plotAveragedMetrics] Saved %d figure(s) to %s\n', step, saveDir);
+    end
 
     fprintf('Rendered %d figures (%d metrics x %d groups).\n', ...
         step, nMetrics, numel(groups));
@@ -234,14 +252,15 @@ end
 % ==========================================================================
 % =========================== rendering ===================================
 % ==========================================================================
-function renderMetricGroupFigure(state, animalsAll, conds, spec, groupIdx, valuesForMetric)
+function figH = renderMetricGroupFigure(state, animalsAll, conds, spec, groupIdx, valuesForMetric)
 % Render one figure for a single (metric, user-group). Conditions on x,
 % baseline/recovery as the two subgroups. animalsAll fixes row ordering
 % so the same animal lands at the same subjIdx in every figure.
 % valuesForMetric is a length-nFiles vector — values(i) is the metric
 % evaluated on state.files{i}, pre-loaded by the caller so this function
-% does no file I/O.
+% does no file I/O. Returns the figure handle so callers can save it.
 
+    figH = gobjects(0);
     nC = numel(conds);
     if nC == 0, return; end
     nAn = numel(animalsAll);
@@ -268,7 +287,7 @@ function renderMetricGroupFigure(state, animalsAll, conds, spec, groupIdx, value
     figName = sprintf('group%d - %s', groupIdx, spec.label);
     % Force normal window state — pubfig_setup defaults to 'maximized'
     % which would stack 88 figures on top of each other.
-    figure('Name', figName, 'WindowState','normal', ...
+    figH = figure('Name', figName, 'WindowState','normal', ...
         'Position',[100 100 900 560]);
 
     if all(cellfun(@(c) all(isnan(c(:))), data(:)))
@@ -317,6 +336,39 @@ end
 % ==========================================================================
 % =========================== misc ========================================
 % ==========================================================================
+function saveFigureAllFormats(fig, outDir)
+% Save one figure in .fig, .png, and .svg into outDir, using a sanitised
+% version of the figure's Name as the basename. Each format is wrapped
+% in its own try/catch so a single failure doesn't abort the loop.
+    name = char(get(fig, 'Name'));
+    if isempty(name), name = sprintf('figure_%d', fig.Number); end
+    safe = regexprep(name, '[^\w\-.()% ]', '_');
+    safe = regexprep(safe, '\s+', '_');
+    safe = regexprep(safe, '_+', '_');
+    safe = strtrim(safe);
+    if isempty(safe), safe = sprintf('figure_%d', fig.Number); end
+    base = fullfile(outDir, safe);
+
+    try
+        savefig(fig, [base '.fig']);
+    catch ME
+        warning('plotAveragedMetrics:saveFig', ...
+            '.fig save failed for %s: %s', safe, ME.message);
+    end
+    try
+        exportgraphics(fig, [base '.png'], 'Resolution', 200);
+    catch ME
+        warning('plotAveragedMetrics:savePng', ...
+            '.png save failed for %s: %s', safe, ME.message);
+    end
+    try
+        print(fig, [base '.svg'], '-dsvg', '-vector');
+    catch ME
+        warning('plotAveragedMetrics:saveSvg', ...
+            '.svg save failed for %s: %s', safe, ME.message);
+    end
+end
+
 function u = uniqueStable(c)
 % unique() preserving the order of first occurrence; tolerates empty input.
     if isempty(c), u = {}; return; end
