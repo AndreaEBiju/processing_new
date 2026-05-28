@@ -50,7 +50,8 @@ function diagnoseMetricCoverage(cacheFile)
             suffix = char(spec.suffix);
             if ~endsWith(suffix, '.mat'), suffix = [suffix '.mat']; end
 
-            candidates = {fullfile(d, [stem suffix])};
+            candidates = {fullfile(d, [base suffix]), ...
+                          fullfile(d, [stem suffix])};
             if contains(stem, 'stim_rec', 'IgnoreCase', true) && ...
                ~endsWith(stem, '_recovery', 'IgnoreCase', true) && ...
                ~endsWith(stem, '_stim',     'IgnoreCase', true)

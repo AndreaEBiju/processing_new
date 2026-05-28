@@ -30,11 +30,20 @@ function v = loadMetric(srcFile, spec)
 
     % Try multiple naming variants because batch_process saves outputs
     % differently depending on the source kind:
-    %   <stem>_<suffix>             for baseline / explicit recovery files
-    %   <stem>_recovery_<suffix>    for stim_rec sources that got split
-    %                               (batch_process appends '_recovery' to
-    %                               the condition before saving)
-    candidates = {fullfile(d, [stem suffix])};
+    %   <base>_<suffix>             non-stim_rec sources (baseline, post-
+    %                               split recovery) — batch_process keeps
+    %                               the full basename including
+    %                               '_blankmotion' as the conditionLabel,
+    %                               so the output ends in
+    %                               '..._blankmotion_HRBR.mat'.
+    %   <stem>_<suffix>             same but with '_blankmotion' stripped
+    %                               (covers files renamed/saved without
+    %                               the suffix).
+    %   <stem>_recovery_<suffix>    stim_rec sources that batch_process
+    %                               split — it strips '_blankmotion' and
+    %                               appends '_recovery' to the condition.
+    candidates = {fullfile(d, [base suffix]), ...
+                  fullfile(d, [stem suffix])};
     if contains(stem, 'stim_rec', 'IgnoreCase', true) && ...
        ~endsWith(stem, '_recovery', 'IgnoreCase', true) && ...
        ~endsWith(stem, '_stim',     'IgnoreCase', true)
