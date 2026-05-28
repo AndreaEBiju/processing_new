@@ -4,10 +4,12 @@
 .AppleDouble
 .LSOverride
 
-# Data + cache files (contain absolute file paths and/or are large)
+# Raw / accidental data .mat files (recordings, analysis outputs).
+# Keep the queue + metrics cache tracked so analysis state syncs across
+# machines via the repo.
 *.mat
-gemsplots_queue.mat
-gemsplots_metrics_cache.mat
+!gemsplots_queue.mat
+!gemsplots_metrics_cache.mat
 
 # Generated figures
 plots/
