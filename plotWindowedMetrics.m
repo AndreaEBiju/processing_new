@@ -54,6 +54,39 @@ function plotWindowedMetrics()
         fprintf('No metrics defined. Exiting.\n');
         return;
     end
+
+    % Auto-fill missing Series/Time fields from the bundled defaults
+    % whenever a spec's label matches a known default. This lets cached
+    % spec tables from earlier (7-col) versions just work — the user
+    % doesn't have to manually re-enter heartRateSeries / metrics_t etc.
+    defaults = defaultWindowedMetricSpecs();
+    nFilled = 0;
+    for k = 1:numel(metricSpecs)
+        if isempty(strtrim(char(metricSpecs(k).seriesField))) || ...
+           isempty(strtrim(char(metricSpecs(k).timeField)))
+            for d = 1:numel(defaults)
+                if strcmpi(strtrim(metricSpecs(k).label), strtrim(defaults(d).label))
+                    if isempty(strtrim(char(metricSpecs(k).seriesField)))
+                        metricSpecs(k).seriesField = defaults(d).seriesField;
+                    end
+                    if isempty(strtrim(char(metricSpecs(k).timeField)))
+                        metricSpecs(k).timeField = defaults(d).timeField;
+                    end
+                    nFilled = nFilled + 1;
+                    break;
+                end
+            end
+        end
+    end
+    if nFilled > 0
+        fprintf('[plotWindowedMetrics] Auto-filled series/time fields for %d cached spec(s) (label-matched defaults). Saving back to cache.\n', nFilled);
+        cacheState = load(cacheFile);
+        cacheState.metrics = metricSpecs; %#ok<NASGU>
+        try, save(cacheFile, '-struct', 'cacheState'); catch ME
+            warning('Cache save failed: %s', ME.message);
+        end
+    end
+
     % keep only those with series + time fields filled
     hasSeries = false(numel(metricSpecs),1);
     for k = 1:numel(metricSpecs)
@@ -63,17 +96,18 @@ function plotWindowedMetrics()
     if ~any(hasSeries)
         warndlg(['None of the metric specs have both "Series field" and ' ...
                  '"Time field" populated. Open the metrics UI and fill ' ...
-                 'them in to enable windowed plotting.'], ...
-                 'plotWindowedMetrics');
+                 'them in (or use Reset to defaults) to enable windowed ' ...
+                 'plotting.'], 'plotWindowedMetrics');
         return;
     end
     skipped = metricSpecs(~hasSeries);
     metricSpecs = metricSpecs(hasSeries);
     if ~isempty(skipped)
-        fprintf('[plotWindowedMetrics] Skipping %d metric(s) without ' ...
-                'series/time fields: %s\n', numel(skipped), ...
-                strjoin({skipped.label}, ', '));
+        fprintf('[plotWindowedMetrics] Skipping %d metric(s) without series/time fields: %s\n', ...
+                numel(skipped), strjoin({skipped.label}, ', '));
     end
+    fprintf('[plotWindowedMetrics] %d metric(s) ready for windowed plotting.\n', ...
+            numel(metricSpecs));
 
     %% ---- windows ----
     if ~isfield(state,'windowsStr') || isempty(state.windowsStr)
