@@ -18,10 +18,14 @@ function specs = defineMetricsUI(cacheFile, defaults)
 %
 % Each metric spec has fields
 %   .label       string  — metric display name (without units)
-%   .units       string  — unit string (e.g. 's', 'ms', 'bpm', 'cpm', '%');
-%                          rendered as '<label> (<units>)' on the y-axis.
-%                          Leave blank for unit-less metrics like
-%                          sample entropy.
+%   .unitsIn     string  — unit the value is STORED in (e.g. 's' if the
+%                          .mat saved HRV in seconds). Empty = "as-is".
+%   .unitsOut    string  — unit to PLOT in (e.g. 'ms'). If unitsIn !=
+%                          unitsOut, values are converted via
+%                          convertUnits() at plot time. The plot y-axis
+%                          reads '<label> (<unitsOut>)'.
+%                          Leave both blank for unit-less metrics
+%                          (e.g. sample entropy).
 %   .suffix      string  — appended to the source file's stem to locate
 %                          the output .mat (e.g. '_HRBR.mat'); '.mat' is
 %                          auto-appended if missing
@@ -110,10 +114,11 @@ function specs = uiDefineMetrics(specsIn, defaults)
     % --- table ---
     aggOpts = {'auto','mean','median','max','min','first','last','sum','scalar'};
     tbl = uitable(grid, ...
-        'ColumnName',     {'Label','Units','File suffix','Field','Aggregator','Channel'}, ...
-        'ColumnEditable', [true true true true true true], ...
-        'ColumnFormat',   {'char','char','char','char',aggOpts,'numeric'}, ...
-        'ColumnWidth',    {180,80,170,180,120,80}, ...
+        'ColumnName',     {'Label','Stored units','Plot units', ...
+                           'File suffix','Field','Aggregator','Channel'}, ...
+        'ColumnEditable', [true true true true true true true], ...
+        'ColumnFormat',   {'char','char','char','char','char',aggOpts,'numeric'}, ...
+        'ColumnWidth',    {150,90,90,150,170,110,75}, ...
         'Data',           specsToTable(specsIn), ...
         'CellSelectionCallback', @(s,e) setappdata(s,'sel',e.Indices));
     tbl.Layout.Row = 2;
@@ -143,7 +148,7 @@ function specs = uiDefineMetrics(specsIn, defaults)
     % ---- nested ----
     function onAdd()
         D = tbl.Data;
-        D(end+1,:) = {'', '', '', '', 'auto', NaN}; %#ok<AGROW>
+        D(end+1,:) = {'', '', '', '', '', 'auto', NaN}; %#ok<AGROW>
         tbl.Data = D;
         status.Text = sprintf('%d metric(s).', size(D,1));
     end
@@ -193,91 +198,132 @@ end
 % =========================== conversions =================================
 % ==========================================================================
 function D = specsToTable(specs)
+% Emit a 7-column cell table:
+%   Label | StoredUnits | PlotUnits | Suffix | Field | Aggregator | Channel
     n = numel(specs);
-    if n == 0, D = cell(0,6); return; end
-    D = cell(n,6);
+    if n == 0, D = cell(0,7); return; end
+    D = cell(n,7);
     for i = 1:n
         s = specs(i);
         D{i,1} = strOrEmpty(getf(s,'label'));
-        D{i,2} = strOrEmpty(getf(s,'units'));
-        D{i,3} = strOrEmpty(getf(s,'suffix'));
-        D{i,4} = strOrEmpty(getf(s,'field'));
-        D{i,5} = strOrEmpty(getf(s,'aggregator'));
-        if isempty(D{i,5}), D{i,5} = 'auto'; end
-        D{i,6} = numOrNaN(getf(s,'channel'));
+        D{i,2} = strOrEmpty(getf(s,'unitsIn'));
+        D{i,3} = strOrEmpty(getf(s,'unitsOut'));
+        D{i,4} = strOrEmpty(getf(s,'suffix'));
+        D{i,5} = strOrEmpty(getf(s,'field'));
+        D{i,6} = strOrEmpty(getf(s,'aggregator'));
+        if isempty(D{i,6}), D{i,6} = 'auto'; end
+        D{i,7} = numOrNaN(getf(s,'channel'));
     end
 end
 
 function specs = tableToSpecs(D)
     if isempty(D), specs = emptySpecs(); return; end
-    rows = struct('label',{},'units',{},'suffix',{},'field',{}, ...
-                  'aggregator',{},'channel',{});
+    rows = emptySpecs();
     for i = 1:size(D,1)
         lab = strOrEmpty(D{i,1});
-        suf = strOrEmpty(D{i,3});
-        fld = strOrEmpty(D{i,4});
+        suf = strOrEmpty(D{i,4});
+        fld = strOrEmpty(D{i,5});
         if isempty(lab) || isempty(suf) || isempty(fld)
             continue;       % skip incomplete rows
         end
         rows(end+1).label    = lab; %#ok<AGROW>
-        rows(end).units      = strOrEmpty(D{i,2});
+        rows(end).unitsIn    = strOrEmpty(D{i,2});
+        rows(end).unitsOut   = strOrEmpty(D{i,3});
         rows(end).suffix     = suf;
         rows(end).field      = fld;
-        agg = strOrEmpty(D{i,5});
+        agg = strOrEmpty(D{i,6});
         if isempty(agg), agg = 'auto'; end
         rows(end).aggregator = agg;
-        rows(end).channel    = numOrNaN(D{i,6});
+        rows(end).channel    = numOrNaN(D{i,7});
     end
     specs = rows(:);
 end
 
 function specs = normaliseSpecs(raw)
-% Accept various legacy shapes; emit a clean column struct array.
-% Auto-migrates older specs whose units were embedded in the label
-% (e.g. 'HRV (ms)') by splitting them into separate label + units.
+% Accept current + legacy shapes; emit a clean column struct array.
+% Migration order (each fills any still-empty fields, never overwrites):
+%   1. Convert legacy 5- or 6-col cell tables into struct array.
+%   2. If 'units' field exists (older split-out form), copy to unitsOut.
+%   3. If unitsOut is still empty, try splitting 'HRV (ms)' style labels.
+%   4. If unitsIn is still empty, default it to unitsOut (no conversion).
     if isstruct(raw)
         specs = raw(:);
-    elseif iscell(raw) && size(raw,2) >= 6
+    elseif iscell(raw) && size(raw,2) == 7
         specs = tableToSpecs(raw);
+    elseif iscell(raw) && size(raw,2) == 6
+        specs = legacyTableToSpecs6(raw);
     elseif iscell(raw) && size(raw,2) == 5
-        % legacy 5-column table — units column was missing
-        specs = legacyTableToSpecs(raw);
+        specs = legacyTableToSpecs5(raw);
     else
         specs = emptySpecs();
     end
-    % fill any missing fields and auto-extract units when needed
+    if isempty(specs), return; end
+
+    % Add missing fields to the struct array (no-op if already there)
+    if ~isfield(specs,'unitsIn'),    [specs.unitsIn]    = deal(''); end
+    if ~isfield(specs,'unitsOut'),   [specs.unitsOut]   = deal(''); end
+    if ~isfield(specs,'aggregator'), [specs.aggregator] = deal('auto'); end
+    if ~isfield(specs,'channel'),    [specs.channel]    = deal(NaN); end
+
     for k = 1:numel(specs)
-        if ~isfield(specs,'aggregator') || isempty(specs(k).aggregator)
+        if isempty(specs(k).unitsOut)
+            if isfield(specs(k),'units') && ~isempty(specs(k).units)
+                specs(k).unitsOut = specs(k).units;
+            else
+                [bare, u] = splitLabelUnits(specs(k).label);
+                specs(k).label    = bare;
+                specs(k).unitsOut = u;
+            end
+        end
+        if isempty(specs(k).unitsIn)
+            specs(k).unitsIn = specs(k).unitsOut;  % default: no conversion
+        end
+        if isempty(specs(k).aggregator)
             specs(k).aggregator = 'auto';
-        end
-        if ~isfield(specs,'channel')
-            specs(k).channel = NaN;
-        end
-        if ~isfield(specs,'units') || isempty(specs(k).units)
-            [bare, units] = splitLabelUnits(specs(k).label);
-            specs(k).label = bare;
-            specs(k).units = units;
         end
     end
 end
 
-function specs = legacyTableToSpecs(D)
-% Old 5-col table: Label | Suffix | Field | Aggregator | Channel
-    rows = struct('label',{},'units',{},'suffix',{},'field',{}, ...
-                  'aggregator',{},'channel',{});
+function specs = legacyTableToSpecs5(D)
+% Very old 5-col table: Label | Suffix | Field | Aggregator | Channel
+    rows = emptySpecs();
     for i = 1:size(D,1)
         lab = strOrEmpty(D{i,1});
         suf = strOrEmpty(D{i,2});
         fld = strOrEmpty(D{i,3});
         if isempty(lab) || isempty(suf) || isempty(fld), continue; end
-        rows(end+1).label    = lab; %#ok<AGROW>
-        rows(end).units      = '';
+        [bare, u] = splitLabelUnits(lab);
+        rows(end+1).label    = bare; %#ok<AGROW>
+        rows(end).unitsIn    = u;
+        rows(end).unitsOut   = u;
         rows(end).suffix     = suf;
         rows(end).field      = fld;
         agg = strOrEmpty(D{i,4});
         if isempty(agg), agg = 'auto'; end
         rows(end).aggregator = agg;
         rows(end).channel    = numOrNaN(D{i,5});
+    end
+    specs = rows(:);
+end
+
+function specs = legacyTableToSpecs6(D)
+% Earlier 6-col table: Label | Units | Suffix | Field | Aggregator | Channel
+    rows = emptySpecs();
+    for i = 1:size(D,1)
+        lab = strOrEmpty(D{i,1});
+        un  = strOrEmpty(D{i,2});
+        suf = strOrEmpty(D{i,3});
+        fld = strOrEmpty(D{i,4});
+        if isempty(lab) || isempty(suf) || isempty(fld), continue; end
+        rows(end+1).label    = lab; %#ok<AGROW>
+        rows(end).unitsIn    = un;
+        rows(end).unitsOut   = un;
+        rows(end).suffix     = suf;
+        rows(end).field      = fld;
+        agg = strOrEmpty(D{i,5});
+        if isempty(agg), agg = 'auto'; end
+        rows(end).aggregator = agg;
+        rows(end).channel    = numOrNaN(D{i,6});
     end
     specs = rows(:);
 end
@@ -296,7 +342,7 @@ function [bare, units] = splitLabelUnits(label)
 end
 
 function s = emptySpecs()
-    s = struct('label',{},'units',{},'suffix',{},'field',{}, ...
+    s = struct('label',{},'unitsIn',{},'unitsOut',{},'suffix',{},'field',{}, ...
                'aggregator',{},'channel',{});
 end
 
