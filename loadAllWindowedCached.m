@@ -192,28 +192,132 @@ end
 % ==========================================================================
 function [baseline, windows] = computeFileValues(srcFile, metricSpecs, winSecs)
 % Runs on a parfeval worker (or main thread in serial fallback). For one
-% source file, loads each metric's time series and computes:
-%   baseline(k)    : mean of the whole series (omitnan)
-%   windows(k,w)   : mean of samples with t-t0 <= winSecs(w)
-% Returns NaN for any (k) whose series cannot be loaded.
+% source file, groups metrics by the result file they target, then issues
+% ONE load() per unique result file pulling every needed (seriesField,
+% timeField) at once. v7 .mat files have to be scanned end-to-end, so
+% batching brings load count from 11-per-source down to ~3-per-source.
+
     nMetrics = numel(metricSpecs);
     nW = numel(winSecs);
     baseline = nan(nMetrics, 1);
     windows  = nan(nMetrics, nW);
+
+    % ----- per-metric: resolve target path + field names -----
+    [d, base, ~] = fileparts(srcFile);
+    stem = regexprep(base, '_blankmotion$', '');
+    targetPath  = cell(nMetrics,1);
+    seriesName  = cell(nMetrics,1);
+    timeName    = cell(nMetrics,1);
+    channelIdx  = nan(nMetrics,1);
     for k = 1:nMetrics
-        [y, t] = loadMetricSeries(srcFile, metricSpecs(k));
-        if isempty(y) || isempty(t), continue; end
-        baseline(k) = mean(y, 'omitnan');
-        t0 = t(1);
-        for w = 1:nW
-            W = winSecs(w);
-            if isinf(W), sel = true(size(t));
-            else,        sel = (t - t0) <= W;
-            end
-            if any(sel)
-                windows(k, w) = mean(y(sel), 'omitnan');
+        spec = metricSpecs(k);
+        if isempty(spec.seriesField) || isempty(spec.timeField), continue; end
+        suffix = char(spec.suffix);
+        if ~endsWith(suffix, '.mat'), suffix = [suffix '.mat']; end
+        candidates = {fullfile(d, [base suffix]), fullfile(d, [stem suffix])};
+        if contains(stem, 'stim_rec', 'IgnoreCase', true) && ...
+           ~endsWith(stem, '_recovery', 'IgnoreCase', true) && ...
+           ~endsWith(stem, '_stim',     'IgnoreCase', true)
+            candidates{end+1} = fullfile(d, [stem '_recovery' suffix]); %#ok<AGROW>
+        end
+        for ci = 1:numel(candidates)
+            if exist(candidates{ci}, 'file')
+                targetPath{k} = candidates{ci}; break;
             end
         end
+        seriesName{k} = char(spec.seriesField);
+        timeName{k}   = char(spec.timeField);
+        if isfield(spec,'channel') && isnumeric(spec.channel) && ~isnan(spec.channel)
+            channelIdx(k) = round(double(spec.channel));
+        end
+    end
+
+    % ----- group metrics by target file path -----
+    valid = ~cellfun(@isempty, targetPath);
+    if ~any(valid), return; end
+    paths = unique(targetPath(valid));
+
+    wState = warning('off', 'MATLAB:load:variableNotFound');
+    cleanupW = onCleanup(@() warning(wState));
+
+    for p = 1:numel(paths)
+        fp = paths{p};
+        idx = find(strcmp(targetPath, fp));
+        wantFields = unique([seriesName(idx); timeName(idx)]);
+        wantFields = wantFields(~cellfun(@isempty, wantFields));
+
+        % single load() with every needed variable
+        try
+            S = load(fp, wantFields{:});
+        catch
+            continue;
+        end
+
+        % resolve actual field names (case-insensitive fallback) once
+        actualName = containers.Map('KeyType','char','ValueType','char');
+        fns = fieldnames(S);
+        for ff = 1:numel(wantFields)
+            w = wantFields{ff};
+            if any(strcmp(fns, w))
+                actualName(w) = w;
+            else
+                hit = strcmpi(fns, w);
+                if sum(hit) == 1, actualName(w) = fns{find(hit,1)}; end
+            end
+        end
+
+        % distribute to each metric using this file
+        for kk = 1:numel(idx)
+            k  = idx(kk);
+            sN = '';
+            tN = '';
+            if isKey(actualName, seriesName{k}), sN = actualName(seriesName{k}); end
+            if isKey(actualName, timeName{k}),   tN = actualName(timeName{k});   end
+            if isempty(sN) || isempty(tN), continue; end
+
+            Y = S.(sN);
+            T = S.(tN);
+            if ~isnumeric(Y) || ~isnumeric(T) || isempty(Y) || isempty(T), continue; end
+
+            if ~isnan(channelIdx(k))
+                Y = selectChannelLocal(Y, channelIdx(k));
+                if isempty(Y), continue; end
+            end
+
+            Y = Y(:); T = T(:);
+            n = min(numel(Y), numel(T));
+            if n < 2, continue; end
+            Y = Y(1:n); T = T(1:n);
+
+            baseline(k) = mean(Y, 'omitnan');
+            t0 = T(1);
+            for w = 1:nW
+                W = winSecs(w);
+                if isinf(W), sel = true(size(T));
+                else,        sel = (T - t0) <= W;
+                end
+                if any(sel)
+                    windows(k, w) = mean(Y(sel), 'omitnan');
+                end
+            end
+        end
+    end
+end
+
+function y = selectChannelLocal(x, ch)
+% Same channel-picker as loadMetric / loadMetricSeries. Inlined so the
+% parfeval worker doesn't need an extra function on the path.
+    y = [];
+    if ~ismatrix(x), return; end
+    [r, c] = size(x);
+    if c == 1 && r > 1, if ch == 1, y = x; end, return; end
+    if r == 1 && c > 1, if ch == 1, y = x.'; end, return; end
+    if c <= 8 && c <= r
+        if ch <= c, y = x(:, ch); end
+    elseif r <= 8 && r < c
+        if ch <= r, y = x(ch, :).'; end
+    else
+        if ch <= c, y = x(:, ch); end
     end
 end
 
