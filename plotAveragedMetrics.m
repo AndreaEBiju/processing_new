@@ -1,0 +1,326 @@
+function plotAveragedMetrics()
+%PLOTAVERAGEDMETRICS  Centralised box+scatter plots of any user-defined
+% averaged metrics across stim conditions. One figure per (metric, user-
+% defined stim group). Each figure shows the conditions within that group
+% on the x-axis, two sub-boxes (baseline, recovery) per condition, with
+% ColorBySubject so each animal keeps its shade rank across all figures.
+%
+% Workflow
+%   1. buildFileQueue       file queue UI, persisted in gemsplots_queue.mat
+%   2. uiDefineGroups       which conditions belong to which user group
+%   3. defineMetricsUI      what to plot — list of metric specs (label,
+%                           file suffix, field name, aggregator, channel).
+%                           Pre-filled with a sensible default set on
+%                           first run; editable + persisted thereafter.
+%                           Includes an "Inspect .mat file..." helper so
+%                           you can browse variable names in any output
+%                           file without leaving the UI.
+%   4. loadMetric per row   generic loader (see loadMetric.m)
+%   5. render               one figure per (metric, group)
+%
+% No metric is hardcoded — adding a new one is just a row in the metrics
+% table, not a code change.
+
+    %% ---- cache + queue UI ----
+    here      = fileparts(mfilename('fullpath'));
+    cacheFile = fullfile(here, 'gemsplots_queue.mat');
+
+    state = buildFileQueue(cacheFile);
+    if isempty(state.files)
+        fprintf('No files selected. Exiting.\n');
+        return;
+    end
+
+    %% ---- groups UI ----
+    if ~isfield(state,'groups'), state.groups = {}; end
+    conditions = uniqueStable(state.condition);
+    [groups, ok] = uiDefineGroups(conditions, state.groups);
+    if ~ok
+        fprintf('Cancelled.\n');
+        return;
+    end
+    state.groups = groups;
+    fprintf('[plotAveragedMetrics] Saving groups to cache (%d group(s)).\n', ...
+        numel(groups));
+    save(cacheFile, '-struct', 'state');
+    fprintf('[plotAveragedMetrics] Cache saved. About to call defineMetricsUI...\n');
+
+    %% ---- metrics UI ----
+    metricSpecs = defineMetricsUI(cacheFile, defaultMetricSpecs());
+    fprintf('[plotAveragedMetrics] defineMetricsUI returned %d spec(s).\n', ...
+        numel(metricSpecs));
+    if isempty(metricSpecs)
+        fprintf('No metrics defined. Exiting.\n');
+        return;
+    end
+
+    %% ---- pre-load every metric value (with on-disk cache) ----
+    % First run is slow (each loadMetric pulls a result file through
+    % Google Drive); subsequent runs are instant because we cache the
+    % extracted scalars to a small local .mat next to the queue cache.
+    % Cache entries are invalidated automatically when the source file's
+    % modification time changes. Delete gemsplots_metrics_cache.mat to
+    % force a full reload.
+    metricsCacheFile = fullfile(here, 'gemsplots_metrics_cache.mat');
+    nMetrics = numel(metricSpecs);
+    [values, hitCount, loadCount] = loadAllMetricsCached( ...
+        state, metricSpecs, metricsCacheFile);
+    fprintf( ...
+        '[plotAveragedMetrics] Metric values ready: %d cache hit(s), %d fresh load(s).\n', ...
+        hitCount, loadCount);
+
+    %% ---- render ----
+    try
+        pubfig_setup('Theme','light');
+    catch ME
+        warning('pubfig_setup failed: %s', ME.message);
+    end
+
+    animalsAll = uniqueStable(state.animal);
+    totalSteps = nMetrics * numel(groups);
+
+    wbR = waitbar(0, 'Rendering plots...', ...
+        'Name','plotAveragedMetrics: rendering');
+    try, set(wbR,'WindowState','normal'); catch, end %#ok<CTCH>
+    step = 0;
+    try
+        for k = 1:nMetrics
+            spec = metricSpecs(k);
+            for gi = 1:numel(groups)
+                step = step + 1;
+                if ishandle(wbR)
+                    waitbar(step/totalSteps, wbR, sprintf( ...
+                        '[%d / %d]  %s — group %d', ...
+                        step, totalSteps, spec.label, gi));
+                end
+                renderMetricGroupFigure(state, animalsAll, groups{gi}, ...
+                    spec, gi, values(:,k));
+            end
+        end
+    catch ME
+        if ishandle(wbR), close(wbR); end
+        rethrow(ME);
+    end
+    if ishandle(wbR), close(wbR); end
+
+    fprintf('Rendered %d figures (%d metrics x %d groups).\n', ...
+        step, nMetrics, numel(groups));
+end
+
+
+% ==========================================================================
+% =========================== groups UI ===================================
+% ==========================================================================
+function [groups, ok] = uiDefineGroups(conditions, priorGroups)
+% uifigure-based group definition. One row per group with an editable
+% comma-separated condition list, pre-filled from priorGroups if any.
+% Avoids the legacy inputdlg, which on macOS R2025a sometimes never
+% surfaces when chained after a uifigure close.
+
+    fprintf('[uiDefineGroups] Opening. Detected conditions: %s\n', ...
+        strjoin(conditions, ', '));
+
+    fig = uifigure('Name','Define groups', 'Position',[220 220 760 460]);
+    g = uigridlayout(fig,[4 1]);
+    g.RowHeight   = {'fit','fit','1x','fit'};
+    g.ColumnWidth = {'1x'};
+
+    uilabel(g, 'Text', ...
+        sprintf('Detected conditions: %s', strjoin(conditions, ', ')), ...
+        'WordWrap','on', 'FontWeight','bold');
+
+    btnRow = uipanel(g,'BorderType','none');
+    bl = uigridlayout(btnRow,[1 4]);
+    bl.ColumnWidth = {110,140,'1x',110};
+    bl.Padding = [0 4 0 4];
+    btnAdd = uibutton(bl,'Text','Add group');
+    btnRem = uibutton(bl,'Text','Remove selected');
+    uilabel(bl,'Text','');
+    btnGo  = uibutton(bl,'Text','Continue', ...
+        'BackgroundColor',[0.7 0.9 0.7]);
+
+    initData = priorGroupsToTable(priorGroups);
+    if isempty(initData)
+        initData = {'Group 1', ''};
+    end
+    tbl = uitable(g, ...
+        'ColumnName',    {'Label','Conditions (comma-separated)'}, ...
+        'ColumnEditable',[true true], ...
+        'ColumnWidth',   {130,'1x'}, ...
+        'Data',          initData, ...
+        'CellSelectionCallback', @(s,e) setappdata(s,'sel',e.Indices));
+
+    status = uilabel(g, 'Text', sprintf('%d group(s).', size(initData,1)));
+
+    btnAdd.ButtonPushedFcn = @(~,~) onAdd();
+    btnRem.ButtonPushedFcn = @(~,~) onRem();
+    btnGo.ButtonPushedFcn  = @(~,~) onGo();
+    fig.CloseRequestFcn    = @(~,~) onCancel();
+
+    cancelled = false;
+    uiwait(fig);
+
+    if cancelled
+        groups = {}; ok = false;
+    else
+        groups = tableToGroups(tbl.Data);
+        ok = ~isempty(groups);
+        if ~ok
+            uialert(fig, 'All groups were empty.', 'Bad input');
+        end
+    end
+    if isvalid(fig), delete(fig); end
+
+    % ---- nested ----
+    function onAdd()
+        D = tbl.Data;
+        D(end+1,:) = {sprintf('Group %d', size(D,1)+1), ''}; %#ok<AGROW>
+        tbl.Data = D;
+        status.Text = sprintf('%d group(s).', size(D,1));
+    end
+    function onRem()
+        sel = getappdata(tbl,'sel');
+        if isempty(sel), return; end
+        D = tbl.Data;
+        D(unique(sel(:,1)),:) = [];
+        tbl.Data = D;
+        status.Text = sprintf('%d group(s).', size(D,1));
+    end
+    function onGo()
+        fprintf('[uiDefineGroups] Continue clicked. %d row(s).\n', ...
+            size(tbl.Data,1));
+        uiresume(fig);
+    end
+    function onCancel()
+        fprintf('[uiDefineGroups] Cancel/close.\n');
+        cancelled = true;
+        uiresume(fig);
+    end
+end
+
+
+function D = priorGroupsToTable(priorGroups)
+    if isempty(priorGroups), D = cell(0,2); return; end
+    n = numel(priorGroups);
+    D = cell(n,2);
+    for k = 1:n
+        D{k,1} = sprintf('Group %d', k);
+        if iscell(priorGroups{k})
+            D{k,2} = strjoin(priorGroups{k}, ', ');
+        else
+            D{k,2} = char(priorGroups{k});
+        end
+    end
+end
+
+function groups = tableToGroups(D)
+    groups = {};
+    if isempty(D), return; end
+    for i = 1:size(D,1)
+        items = strsplit(strtrim(D{i,2}), ',');
+        items = strtrim(items);
+        items = items(~cellfun('isempty', items));
+        if ~isempty(items)
+            groups{end+1,1} = items; %#ok<AGROW>
+        end
+    end
+end
+
+
+% ==========================================================================
+% =========================== rendering ===================================
+% ==========================================================================
+function renderMetricGroupFigure(state, animalsAll, conds, spec, groupIdx, valuesForMetric)
+% Render one figure for a single (metric, user-group). Conditions on x,
+% baseline/recovery as the two subgroups. animalsAll fixes row ordering
+% so the same animal lands at the same subjIdx in every figure.
+% valuesForMetric is a length-nFiles vector — values(i) is the metric
+% evaluated on state.files{i}, pre-loaded by the caller so this function
+% does no file I/O.
+
+    nC = numel(conds);
+    if nC == 0, return; end
+    nAn = numel(animalsAll);
+
+    data = cell(nC, 2);                  % rows = conditions, cols = phases
+    for ci = 1:nC
+        cond = conds{ci};
+        for ph = 1:2
+            if ph == 1, phaseName = 'baseline'; else, phaseName = 'recovery'; end
+            v = nan(nAn,1);
+            for ai = 1:nAn
+                aniName = animalsAll{ai};
+                idx = find( strcmpi(state.condition, cond)     & ...
+                            strcmpi(state.phase,     phaseName) & ...
+                            strcmpi(state.animal,    aniName), 1);
+                if ~isempty(idx)
+                    v(ai) = valuesForMetric(idx);
+                end
+            end
+            data{ci, ph} = v;
+        end
+    end
+
+    figName = sprintf('group%d - %s', groupIdx, spec.label);
+    figure('Name', figName);
+
+    if all(cellfun(@(c) all(isnan(c(:))), data(:)))
+        text(0.5, 0.5, sprintf('no data for group %d / %s', groupIdx, spec.label), ...
+            'HorizontalAlignment','center','Units','normalized');
+        axis off;
+        return;
+    end
+
+    boxScatterPlot(data, ...
+        'GroupLabels',    conds, ...
+        'SubgroupLabels', {'baseline','recovery'}, ...
+        'YLabel',         spec.label, ...
+        'XLabel',         sprintf('Group %d', groupIdx), ...
+        'Title',          sprintf('%s — group %d', spec.label, groupIdx), ...
+        'ColorBySubject', true);
+end
+
+
+% ==========================================================================
+% =========================== defaults ====================================
+% ==========================================================================
+function specs = defaultMetricSpecs()
+% Sensible defaults seeded into the metric table on first run.
+    specs = [ ...
+        ms('HR (bpm)',                  '_HRBR.mat',         'avgHeartRate',       'auto',   NaN); ...
+        ms('Breathing rate (bpm)',      '_HRBR.mat',         'avgBreathRate',      'auto',   NaN); ...
+        ms('HRV (ms)',                  '_HRVMeasures.mat',  'hrv',                'auto',   NaN); ...
+        ms('pNN5 (%)',                  '_HRVMeasures.mat',  'pnn5',               'auto',   NaN); ...
+        ms('RMSSD (ms)',                '_HRVMeasures.mat',  'rmssd',              'auto',   NaN); ...
+        ms('Sample entropy',            '_HRVMeasures.mat',  'sampEn',             'auto',   NaN); ...
+        ms('SD1 (ms)',                  '_HRVMeasures.mat',  'sd1',                'auto',   NaN); ...
+        ms('SD2 (ms)',                  '_HRVMeasures.mat',  'sd2',                'auto',   NaN); ...
+        ms('SW rate ANT1 (cpm)',        '_slowWaves.mat',    'slowWaveRateSeries', 'mean',   1);   ...
+        ms('SW rate ANT2 (cpm)',        '_slowWaves.mat',    'slowWaveRateSeries', 'mean',   2);   ...
+        ms('SW rate ANT3 (cpm)',        '_slowWaves.mat',    'slowWaveRateSeries', 'mean',   3) ];
+end
+
+function s = ms(label, suffix, field, aggregator, channel)
+    s = struct('label',label,'suffix',suffix,'field',field, ...
+               'aggregator',aggregator,'channel',channel);
+end
+
+
+% ==========================================================================
+% =========================== misc ========================================
+% ==========================================================================
+function u = uniqueStable(c)
+% unique() preserving the order of first occurrence; tolerates empty input.
+    if isempty(c), u = {}; return; end
+    if ~iscell(c), c = cellstr(c); end
+    [~, ia] = unique(c, 'stable');
+    u = c(sort(ia));
+end
+
+function s = shortName(fp)
+% Last-folder/basename label for progress dialogs (no scary long paths).
+    [d, b, e] = fileparts(char(fp));
+    [~, parent] = fileparts(d);
+    s = [parent filesep b e];
+    if numel(s) > 70, s = ['...' s(end-66:end)]; end
+end

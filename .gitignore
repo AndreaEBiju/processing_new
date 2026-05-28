@@ -1,0 +1,24 @@
+# macOS resource-fork metadata
+._*
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Data + cache files (contain absolute file paths and/or are large)
+*.mat
+gemsplots_queue.mat
+gemsplots_metrics_cache.mat
+
+# Generated figures
+plots/
+plots_demo/
+
+# Editor / IDE
+.vscode/
+*.swp
+*~
+
+# MATLAB ephemera
+*.asv
+*.m~
+slprj/
