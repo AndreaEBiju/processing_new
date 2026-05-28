@@ -27,8 +27,28 @@ function v = loadMetric(srcFile, spec)
     stem = regexprep(base, '_blankmotion$', '');
     suffix = char(spec.suffix);
     if ~endsWith(suffix, '.mat'), suffix = [suffix '.mat']; end
-    fp = fullfile(d, [stem suffix]);
-    if ~exist(fp,'file')
+
+    % Try multiple naming variants because batch_process saves outputs
+    % differently depending on the source kind:
+    %   <stem>_<suffix>             for baseline / explicit recovery files
+    %   <stem>_recovery_<suffix>    for stim_rec sources that got split
+    %                               (batch_process appends '_recovery' to
+    %                               the condition before saving)
+    candidates = {fullfile(d, [stem suffix])};
+    if contains(stem, 'stim_rec', 'IgnoreCase', true) && ...
+       ~endsWith(stem, '_recovery', 'IgnoreCase', true) && ...
+       ~endsWith(stem, '_stim',     'IgnoreCase', true)
+        candidates{end+1} = fullfile(d, [stem '_recovery' suffix]);
+    end
+
+    fp = '';
+    for ci = 1:numel(candidates)
+        if exist(candidates{ci}, 'file')
+            fp = candidates{ci};
+            break;
+        end
+    end
+    if isempty(fp)
         return;
     end
 

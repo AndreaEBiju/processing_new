@@ -55,7 +55,12 @@ function [values, hitCount, loadCount] = loadAllMetricsCached(state, metricSpecs
         if ~isempty(info), fileMtimes(i) = info(1).datenum; end
         for k = 1:nMetrics
             ck = [state.files{i} '||' specKeys{k}];
-            if isKey(cacheMap, ck) && cacheMap(ck).mtime == fileMtimes(i)
+            if isKey(cacheMap, ck) && cacheMap(ck).mtime == fileMtimes(i) ...
+                    && ~isnan(cacheMap(ck).value)
+                % Real cached value — use it. NaN entries are treated as
+                % misses so transient load failures (missing output file,
+                % unsynced Google Drive item, wrong field name) get
+                % retried on every run instead of being frozen as NaN.
                 values(i,k) = cacheMap(ck).value;
                 hitCount = hitCount + 1;
             else
@@ -129,8 +134,12 @@ function [values, hitCount, loadCount] = loadAllMetricsCached(state, metricSpecs
             for kk = 1:numel(kList)
                 k = kList(kk);
                 values(i,k) = vals(kk);
-                ck = [state.files{i} '||' specKeys{k}];
-                cacheMap(ck) = struct('mtime', fileMtimes(i), 'value', vals(kk));
+                if ~isnan(vals(kk))
+                    % Only cache successful loads. NaNs (missing file,
+                    % missing field, etc.) get retried next run.
+                    ck = [state.files{i} '||' specKeys{k}];
+                    cacheMap(ck) = struct('mtime', fileMtimes(i), 'value', vals(kk));
+                end
             end
             nDone = nDone + 1;
             updateBar(wb, nDone, nF, state.files{i});
@@ -145,8 +154,12 @@ function [values, hitCount, loadCount] = loadAllMetricsCached(state, metricSpecs
             for kk = 1:numel(kList)
                 k = kList(kk);
                 values(i,k) = vals(kk);
-                ck = [state.files{i} '||' specKeys{k}];
-                cacheMap(ck) = struct('mtime', fileMtimes(i), 'value', vals(kk));
+                if ~isnan(vals(kk))
+                    % Only cache successful loads. NaNs (missing file,
+                    % missing field, etc.) get retried next run.
+                    ck = [state.files{i} '||' specKeys{k}];
+                    cacheMap(ck) = struct('mtime', fileMtimes(i), 'value', vals(kk));
+                end
             end
             nDone = nDone + 1;
             updateBar(wb, nDone, nF, state.files{i});
