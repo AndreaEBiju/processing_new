@@ -90,6 +90,27 @@ function plotAveragedMetrics()
         fprintf('[plotAveragedMetrics] Saving figures to: %s\n', saveDir);
     end
 
+    %% ---- ask for auto-close delay ----
+    % After each figure is rendered (and saved if a folder was picked),
+    % pause this many seconds then close it. 0 = keep every figure open.
+    defAutoClose = '5';
+    if isempty(saveDir), defAutoClose = '0'; end   % nothing saved -> keep open by default
+    ac = inputdlg( ...
+        {sprintf(['Auto-close each figure after N seconds (0 = keep all open).\n' ...
+                  '%d figures will be produced.'], nMetrics * numel(groups))}, ...
+        'Auto-close', [1 60], {defAutoClose});
+    if isempty(ac)
+        autoCloseSec = 0;
+    else
+        autoCloseSec = str2double(ac{1});
+        if isnan(autoCloseSec) || autoCloseSec < 0
+            autoCloseSec = 0;
+        end
+    end
+    if autoCloseSec > 0
+        fprintf('[plotAveragedMetrics] Each figure will auto-close after %g s.\n', autoCloseSec);
+    end
+
     wbR = waitbar(0, 'Rendering plots...', ...
         'Name','plotAveragedMetrics: rendering');
     try, set(wbR,'WindowState','normal'); catch, end %#ok<CTCH>
@@ -113,6 +134,11 @@ function plotAveragedMetrics()
                     spec, gi, values(:,k));
                 if ~isempty(saveDir) && ~isempty(figH) && ishandle(figH)
                     saveFigureAllFormats(figH, saveDir);
+                end
+                if autoCloseSec > 0 && ~isempty(figH) && ishandle(figH)
+                    drawnow;
+                    pause(autoCloseSec);
+                    if ishandle(figH), close(figH); end
                 end
             end
         end
