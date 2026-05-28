@@ -299,6 +299,7 @@ function figH = renderMetricGroupFigure(state, animalsAll, conds, spec, groupIdx
     end
 
     data = cell(nC, 2);                  % rows = conditions, cols = phases
+    missing = cell(0,1);                 % flag queued sources whose value was NaN
     for ci = 1:nC
         cond = conds{ci};
         for ph = 1:2
@@ -311,9 +312,31 @@ function figH = renderMetricGroupFigure(state, animalsAll, conds, spec, groupIdx
                             strcmpi(state.animal,    aniName), 1);
                 if ~isempty(idx)
                     v(ai) = valuesForMetric(idx);
+                    if isnan(v(ai))
+                        % Source was in queue but loader returned NaN —
+                        % flag it. (Animals with no queued source for
+                        % this combo are silently skipped — those are
+                        % expected absences, not load failures.)
+                        [~, fb, fe] = fileparts(state.files{idx});
+                        missing{end+1,1} = sprintf( ...
+                            '%s / %s / animal=%s  (%s)', ...
+                            cond, phaseName, aniName, [fb fe]); %#ok<AGROW>
+                    end
                 end
             end
             data{ci, ph} = v;
+        end
+    end
+
+    if ~isempty(missing)
+        fprintf('[%s — group %d] %d missing data point(s):\n', ...
+            displayLabel(spec), groupIdx, numel(missing));
+        nShow = min(20, numel(missing));
+        for n = 1:nShow
+            fprintf('    %s\n', missing{n});
+        end
+        if numel(missing) > nShow
+            fprintf('    ... (+%d more)\n', numel(missing) - nShow);
         end
     end
 
@@ -338,7 +361,9 @@ function figH = renderMetricGroupFigure(state, animalsAll, conds, spec, groupIdx
         'YLabel',         dispLab, ...
         'XLabel',         sprintf('Group %d', groupIdx), ...
         'Title',          sprintf('%s — group %d', dispLab, groupIdx), ...
-        'ColorBySubject', true);
+        'ColorBySubject', true, ...
+        'ConnectPaired',  true, ...
+        'PairLineStyle',  ':');
 end
 
 

@@ -96,6 +96,8 @@ addParameter(p,'MarkerSize',28,     @(x)isnumeric(x)&&isscalar(x)&&x>0);
 addParameter(p,'MarkerAlpha',0.85,  @(x)isnumeric(x)&&isscalar(x)&&x>=0&&x<=1);
 addParameter(p,'ShowOutliers',false,@islogical);
 addParameter(p,'ConnectPaired',false,@islogical);
+addParameter(p,'PairLineStyle',':', ...
+    @(s)any(strcmpi(s,{'-','--',':','-.'})));
 addParameter(p,'ColorBySubject',false,@islogical);
 addParameter(p,'CycleMarkers',false, ...
     @(x)islogical(x)||(ischar(x)||isstring(x)));
@@ -187,23 +189,31 @@ for g = 1:G
         nMaxGroup    = 0;
     end
 
+    % Per-subject jitter (used by BOTH paired lines and scatter so the
+    % line endpoints land exactly on the dot centres).
+    nMaxG = max(cellfun(@(v) numel(v), data(g,:)));
+    if opt.ConnectPaired && S >= 2
+        subjJit = (rand(nMaxG, 1) - 0.5) * jitW;
+    else
+        subjJit = [];                              % per-point jitter below
+    end
+
     % paired-line layer first (so it sits behind boxes/scatter)
     if opt.ConnectPaired && S >= 2
         % collect a value matrix N x S for this group, NaN where missing
-        nMax = max(cellfun(@(v) numel(v), data(g,:)));
-        Y = nan(nMax, S);
+        Y = nan(nMaxG, S);
         for s = 1:S
             v = data{g,s}(:);
             Y(1:numel(v), s) = v;
         end
-        Xc = groupCenter(g) + subOffset;          % 1 x S box centers
-        % per-subject jittered x (same jitter across all S so lines stay tidy)
-        jx = (rand(nMax,1) - 0.5) * jitW;
-        Xmat = bsxfun(@plus, Xc, jx);             % nMax x S
+        Xc   = groupCenter(g) + subOffset;          % 1 x S box centers
+        Xmat = bsxfun(@plus, Xc, subjJit);          % nMaxG x S
         valid = all(~isnan(Y), 2);
         if any(valid)
             h.pair{g} = plot(ax, Xmat(valid,:).', Y(valid,:).', ...
-                '-', 'Color', [fgCol(:).' 0.35], 'LineWidth', 0.6, ...
+                opt.PairLineStyle, ...
+                'Color',     [fgCol(:).' 0.45], ...
+                'LineWidth', 0.8, ...
                 'HandleVisibility','off');
         end
     end
@@ -236,10 +246,9 @@ for g = 1:G
 
         % scatter overlay
         if opt.ConnectPaired && S >= 2
-            % reuse the same jitter as the paired lines so dots sit on the joins
-            % rebuild here by re-seeding deterministically per group is unnecessary;
-            % we recompute fresh jitter that is independent of the paired layer
-            xs = xc + (rand(numel(y),1) - 0.5) * (jitW * 0.4);
+            % use the same per-subject jitter that the paired lines used
+            % so the dot centres land exactly on the line endpoints.
+            xs = xc + subjJit(subjIdx);
         else
             xs = xc + (rand(numel(y),1) - 0.5) * jitW;
         end
