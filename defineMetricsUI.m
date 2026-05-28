@@ -30,6 +30,15 @@ function specs = defineMetricsUI(cacheFile, defaults)
 %                          the output .mat (e.g. '_HRBR.mat'); '.mat' is
 %                          auto-appended if missing
 %   .field       string  — variable name inside the .mat
+%   .seriesField string  — optional. Name of the TIME-SERIES variable in
+%                          the same .mat (e.g. 'heartRateSeries',
+%                          'slowWaveRateSeries'). Used by
+%                          plotWindowedMetrics; leave blank for metrics
+%                          that have no time-series counterpart.
+%   .timeField   string  — optional. Name of the time-vector variable
+%                          that goes with .seriesField (e.g. 'metrics_t',
+%                          'slowWaveRateTime'). Required by
+%                          plotWindowedMetrics whenever .seriesField is set.
 %   .aggregator  string  — one of {auto,mean,median,max,min,first,last,sum,scalar}
 %                          applied after channel selection. 'auto' (default)
 %                          returns the value as-is if already scalar, else
@@ -115,10 +124,12 @@ function specs = uiDefineMetrics(specsIn, defaults)
     aggOpts = {'auto','mean','median','max','min','first','last','sum','scalar'};
     tbl = uitable(grid, ...
         'ColumnName',     {'Label','Stored units','Plot units', ...
-                           'File suffix','Field','Aggregator','Channel'}, ...
-        'ColumnEditable', [true true true true true true true], ...
-        'ColumnFormat',   {'char','char','char','char','char',aggOpts,'numeric'}, ...
-        'ColumnWidth',    {150,90,90,150,170,110,75}, ...
+                           'File suffix','Field','Series field','Time field', ...
+                           'Aggregator','Channel'}, ...
+        'ColumnEditable', [true true true true true true true true true], ...
+        'ColumnFormat',   {'char','char','char','char','char','char','char', ...
+                           aggOpts,'numeric'}, ...
+        'ColumnWidth',    {130,75,75,140,150,140,110,100,70}, ...
         'Data',           specsToTable(specsIn), ...
         'CellSelectionCallback', @(s,e) setappdata(s,'sel',e.Indices));
     tbl.Layout.Row = 2;
@@ -148,7 +159,7 @@ function specs = uiDefineMetrics(specsIn, defaults)
     % ---- nested ----
     function onAdd()
         D = tbl.Data;
-        D(end+1,:) = {'', '', '', '', '', 'auto', NaN}; %#ok<AGROW>
+        D(end+1,:) = {'', '', '', '', '', '', '', 'auto', NaN}; %#ok<AGROW>
         tbl.Data = D;
         status.Text = sprintf('%d metric(s).', size(D,1));
     end
@@ -198,11 +209,12 @@ end
 % =========================== conversions =================================
 % ==========================================================================
 function D = specsToTable(specs)
-% Emit a 7-column cell table:
-%   Label | StoredUnits | PlotUnits | Suffix | Field | Aggregator | Channel
+% Emit a 9-column cell table:
+%   Label | StoredUnits | PlotUnits | Suffix | Field |
+%   SeriesField | TimeField | Aggregator | Channel
     n = numel(specs);
-    if n == 0, D = cell(0,7); return; end
-    D = cell(n,7);
+    if n == 0, D = cell(0,9); return; end
+    D = cell(n,9);
     for i = 1:n
         s = specs(i);
         D{i,1} = strOrEmpty(getf(s,'label'));
@@ -210,9 +222,11 @@ function D = specsToTable(specs)
         D{i,3} = strOrEmpty(getf(s,'unitsOut'));
         D{i,4} = strOrEmpty(getf(s,'suffix'));
         D{i,5} = strOrEmpty(getf(s,'field'));
-        D{i,6} = strOrEmpty(getf(s,'aggregator'));
-        if isempty(D{i,6}), D{i,6} = 'auto'; end
-        D{i,7} = numOrNaN(getf(s,'channel'));
+        D{i,6} = strOrEmpty(getf(s,'seriesField'));
+        D{i,7} = strOrEmpty(getf(s,'timeField'));
+        D{i,8} = strOrEmpty(getf(s,'aggregator'));
+        if isempty(D{i,8}), D{i,8} = 'auto'; end
+        D{i,9} = numOrNaN(getf(s,'channel'));
     end
 end
 
@@ -226,15 +240,17 @@ function specs = tableToSpecs(D)
         if isempty(lab) || isempty(suf) || isempty(fld)
             continue;       % skip incomplete rows
         end
-        rows(end+1).label    = lab; %#ok<AGROW>
-        rows(end).unitsIn    = strOrEmpty(D{i,2});
-        rows(end).unitsOut   = strOrEmpty(D{i,3});
-        rows(end).suffix     = suf;
-        rows(end).field      = fld;
-        agg = strOrEmpty(D{i,6});
+        rows(end+1).label       = lab; %#ok<AGROW>
+        rows(end).unitsIn       = strOrEmpty(D{i,2});
+        rows(end).unitsOut      = strOrEmpty(D{i,3});
+        rows(end).suffix        = suf;
+        rows(end).field         = fld;
+        rows(end).seriesField   = strOrEmpty(D{i,6});
+        rows(end).timeField     = strOrEmpty(D{i,7});
+        agg = strOrEmpty(D{i,8});
         if isempty(agg), agg = 'auto'; end
-        rows(end).aggregator = agg;
-        rows(end).channel    = numOrNaN(D{i,7});
+        rows(end).aggregator    = agg;
+        rows(end).channel       = numOrNaN(D{i,9});
     end
     specs = rows(:);
 end
@@ -248,8 +264,10 @@ function specs = normaliseSpecs(raw)
 %   4. If unitsIn is still empty, default it to unitsOut (no conversion).
     if isstruct(raw)
         specs = raw(:);
-    elseif iscell(raw) && size(raw,2) == 7
+    elseif iscell(raw) && size(raw,2) == 9
         specs = tableToSpecs(raw);
+    elseif iscell(raw) && size(raw,2) == 7
+        specs = legacyTableToSpecs7(raw);
     elseif iscell(raw) && size(raw,2) == 6
         specs = legacyTableToSpecs6(raw);
     elseif iscell(raw) && size(raw,2) == 5
@@ -260,10 +278,12 @@ function specs = normaliseSpecs(raw)
     if isempty(specs), return; end
 
     % Add missing fields to the struct array (no-op if already there)
-    if ~isfield(specs,'unitsIn'),    [specs.unitsIn]    = deal(''); end
-    if ~isfield(specs,'unitsOut'),   [specs.unitsOut]   = deal(''); end
-    if ~isfield(specs,'aggregator'), [specs.aggregator] = deal('auto'); end
-    if ~isfield(specs,'channel'),    [specs.channel]    = deal(NaN); end
+    if ~isfield(specs,'unitsIn'),     [specs.unitsIn]     = deal(''); end
+    if ~isfield(specs,'unitsOut'),    [specs.unitsOut]    = deal(''); end
+    if ~isfield(specs,'seriesField'), [specs.seriesField] = deal(''); end
+    if ~isfield(specs,'timeField'),   [specs.timeField]   = deal(''); end
+    if ~isfield(specs,'aggregator'),  [specs.aggregator]  = deal('auto'); end
+    if ~isfield(specs,'channel'),     [specs.channel]     = deal(NaN); end
 
     for k = 1:numel(specs)
         if isempty(specs(k).unitsOut)
@@ -328,6 +348,28 @@ function specs = legacyTableToSpecs6(D)
     specs = rows(:);
 end
 
+function specs = legacyTableToSpecs7(D)
+% Previous 7-col table:
+%   Label | StoredUnits | PlotUnits | Suffix | Field | Aggregator | Channel
+    rows = emptySpecs();
+    for i = 1:size(D,1)
+        lab = strOrEmpty(D{i,1});
+        suf = strOrEmpty(D{i,4});
+        fld = strOrEmpty(D{i,5});
+        if isempty(lab) || isempty(suf) || isempty(fld), continue; end
+        rows(end+1).label    = lab; %#ok<AGROW>
+        rows(end).unitsIn    = strOrEmpty(D{i,2});
+        rows(end).unitsOut   = strOrEmpty(D{i,3});
+        rows(end).suffix     = suf;
+        rows(end).field      = fld;
+        agg = strOrEmpty(D{i,6});
+        if isempty(agg), agg = 'auto'; end
+        rows(end).aggregator = agg;
+        rows(end).channel    = numOrNaN(D{i,7});
+    end
+    specs = rows(:);
+end
+
 function [bare, units] = splitLabelUnits(label)
 % 'HRV (ms)' -> ('HRV', 'ms');  'Sample entropy' -> ('Sample entropy', '')
     label = char(label);
@@ -343,6 +385,7 @@ end
 
 function s = emptySpecs()
     s = struct('label',{},'unitsIn',{},'unitsOut',{},'suffix',{},'field',{}, ...
+               'seriesField',{},'timeField',{}, ...
                'aggregator',{},'channel',{});
 end
 
