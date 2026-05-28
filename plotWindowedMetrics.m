@@ -138,9 +138,12 @@ function plotWindowedMetrics()
         if ~isnan(v) && v >= 0, autoCloseSec = v; end
     end
 
-    %% ---- compute baseline means + windowed recovery means ----
-    [baselineByFile, windowByFile] = computeWindowedValues( ...
-        state, metricSpecs, winSecs);
+    %% ---- compute baseline means + windowed recovery means (cached + parallel) ----
+    windowedCacheFile = fullfile(here, 'gemsplots_windowed_cache.mat');
+    [baselineByFile, windowByFile, hitCount, loadCount] = ...
+        loadAllWindowedCached(state, metricSpecs, winSecs, windowedCacheFile);
+    fprintf(['[plotWindowedMetrics] Time-series values ready: ' ...
+             '%d cache hit(s), %d fresh load(s).\n'], hitCount, loadCount);
 
     %% ---- render ----
     try
@@ -241,66 +244,6 @@ function [winSecs, winLabels, ok, winStr] = defineWindowsUI(defaultStr)
     ok = ~isempty(winSecs);
     if ~ok
         warndlg('No valid windows parsed.','Bad input');
-    end
-end
-
-
-% ==========================================================================
-% =========================== compute =====================================
-% ==========================================================================
-function [baselineByFile, windowByFile] = computeWindowedValues(state, metricSpecs, winSecs)
-% Returns
-%   baselineByFile : nFiles x nMetrics       (mean of the FULL series)
-%   windowByFile   : nFiles x nMetrics x nW  (mean of series over each window
-%                                              starting from t0 = first sample)
-%
-% For the windowed slot, 'full' (Inf) uses every sample. For finite
-% windows, samples with t <= t0 + W are averaged (omitnan).
-%
-% This is the bulk-load step. Uses a waitbar to show per-file progress.
-
-    nFiles   = numel(state.files);
-    nMetrics = numel(metricSpecs);
-    nW       = numel(winSecs);
-    baselineByFile = nan(nFiles, nMetrics);
-    windowByFile   = nan(nFiles, nMetrics, nW);
-
-    wb = waitbar(0, sprintf('Loading time series from %d file(s)...', nFiles), ...
-        'Name','plotWindowedMetrics: loading');
-    try, set(wb,'WindowState','normal'); catch, end %#ok<CTCH>
-    try
-        ax_ = findall(wb,'Type','axes');
-        set(findall(ax_,'Type','text'),'Interpreter','none');
-    catch, end %#ok<CTCH>
-    cleanup = onCleanup(@() safeCloseWb(wb)); %#ok<NASGU>
-
-    for i = 1:nFiles
-        if ishandle(wb)
-            [~, b, e] = fileparts(state.files{i});
-            waitbar(i/nFiles, wb, sprintf('[%d / %d] %s', i, nFiles, [b e]));
-        end
-        for k = 1:nMetrics
-            spec = metricSpecs(k);
-            [y, t] = loadMetricSeries(state.files{i}, spec);
-            if isempty(y) || isempty(t), continue; end
-            % full-series mean -> used as baseline reference if this file
-            % happens to be a baseline source
-            baselineByFile(i,k) = mean(y, 'omitnan');
-            % per-window means -> used if this file happens to be a
-            % recovery source. t is in the file's own units (seconds).
-            t0 = t(1);
-            for w = 1:nW
-                W = winSecs(w);
-                if isinf(W)
-                    sel = true(size(t));
-                else
-                    sel = (t - t0) <= W;
-                end
-                if any(sel)
-                    windowByFile(i,k,w) = mean(y(sel), 'omitnan');
-                end
-            end
-        end
     end
 end
 
