@@ -160,26 +160,53 @@ function figH = renderTraceFigure(state, spec, cond, seriesThisMetric)
 
     recIdx = find( strcmpi(state.condition, cond) & ...
                    strcmpi(state.phase,     'recovery') );
-    if isempty(recIdx)
+    nExpected = numel(recIdx);
+    if nExpected == 0
         fprintf('[plotTimeTraces] %s / %s : no recovery files in queue\n', ...
             displayLabel(spec), cond);
         return;
     end
 
-    % Gather each animal's series
+    % Gather each trial's series; record dropped ones with the reason.
     Ys = {}; Ts = {}; animLabels = {};
+    dropped = {};
     for ri = 1:numel(recIdx)
         i = recIdx(ri);
         s = seriesThisMetric{i};
-        if isempty(s) || isempty(s.y) || isempty(s.t), continue; end
+        [~, fname, fext] = fileparts(state.files{i});
+        ani = state.animal{i};
+        if isempty(s)
+            dropped{end+1} = sprintf( ...
+                '   animal=%s  no series  (load failed / field missing)  %s', ...
+                ani, [fname fext]); %#ok<AGROW>
+            continue;
+        end
+        if isempty(s.y) || isempty(s.t)
+            dropped{end+1} = sprintf( ...
+                '   animal=%s  empty y or t  %s', ani, [fname fext]); %#ok<AGROW>
+            continue;
+        end
+        if numel(s.y) < 2
+            dropped{end+1} = sprintf( ...
+                '   animal=%s  only %d sample(s) (need >=2)  %s', ...
+                ani, numel(s.y), [fname fext]); %#ok<AGROW>
+            continue;
+        end
         Ys{end+1}         = double(s.y); %#ok<AGROW>
         Ts{end+1}         = double(s.t); %#ok<AGROW>
-        animLabels{end+1} = state.animal{i}; %#ok<AGROW>
+        animLabels{end+1} = ani; %#ok<AGROW>
     end
     nTr = numel(Ys);
+
+    if ~isempty(dropped) || nTr < nExpected
+        fprintf('[plotTimeTraces] %s / %s : %d / %d trial(s) usable\n', ...
+            displayLabel(spec), cond, nTr, nExpected);
+        for d = 1:numel(dropped)
+            fprintf('%s\n', dropped{d});
+        end
+    end
+
     if nTr == 0
-        fprintf('[plotTimeTraces] %s / %s : no valid series loaded\n', ...
-            displayLabel(spec), cond);
         return;
     end
 
@@ -255,15 +282,17 @@ function figH = renderTraceFigure(state, spec, cond, seriesThisMetric)
             'HandleVisibility','off');
     end
 
-    % Mean line (bold)
+    % Mean line (bold). n is trials (a single animal can contribute >1).
+    nUniqueAn = numel(unique(animLabels, 'stable'));
     plot(ax, tGrid, meanY, '-', ...
         'Color', col, 'LineWidth', 2.5, ...
-        'DisplayName', sprintf('mean (n=%d animals)', nTr));
+        'DisplayName', sprintf('mean (n=%d trials, %d animal(s))', nTr, nUniqueAn));
 
     % Cosmetics
     xlabel(ax, 'Recovery time (s)', 'Interpreter','none');
     ylabel(ax, dispLab,             'Interpreter','none');
-    title (ax, sprintf('%s — %s recovery', dispLab, cond), 'Interpreter','none');
+    title (ax, sprintf('%s — %s recovery  (n=%d / %d trials)', ...
+        dispLab, cond, nTr, nExpected), 'Interpreter','none');
     set(ax, 'TickLabelInterpreter','none');
     legend(ax, 'show', 'Location','best', 'Interpreter','none');
     grid(ax, 'on');
