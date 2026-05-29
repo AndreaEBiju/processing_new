@@ -190,6 +190,9 @@ function figH = renderViolinFigure(state, animalsAll, conds, spec, ...
         end
     end
 
+    % Per-(condition, animal) status so we can explain blank columns.
+    reasons = cell(0,1);
+    condUsable = false(nC, 1);
     for ci = 1:nC
         cond = conds{ci};
         for ai = 1:nAn
@@ -200,14 +203,66 @@ function figH = renderViolinFigure(state, animalsAll, conds, spec, ...
             iRec  = find( strcmpi(state.condition, cond)     & ...
                           strcmpi(state.phase,     'recovery')& ...
                           strcmpi(state.animal,    aniName), 1);
-            if isempty(iBase) || isempty(iRec), continue; end
+
+            % Both missing -> animal wasn't run here. Silent skip.
+            if isempty(iBase) && isempty(iRec), continue; end
+            if isempty(iBase)
+                reasons{end+1,1} = sprintf( ...
+                    '%s / animal=%s : no BASELINE file in queue (recovery=%s)', ...
+                    cond, aniName, briefName(state.files{iRec})); %#ok<AGROW>
+                continue;
+            end
+            if isempty(iRec)
+                reasons{end+1,1} = sprintf( ...
+                    '%s / animal=%s : no RECOVERY file in queue (baseline=%s)', ...
+                    cond, aniName, briefName(state.files{iBase})); %#ok<AGROW>
+                continue;
+            end
+
             bm = baselineThisMetric(iBase);
-            if isnan(bm) || bm == 0, continue; end
+            if isnan(bm) || bm == 0
+                reasons{end+1,1} = sprintf( ...
+                    '%s / animal=%s : baseline mean is %s for %s', ...
+                    cond, aniName, ternary(isnan(bm),'NaN','zero'), ...
+                    briefName(state.files{iBase})); %#ok<AGROW>
+                continue;
+            end
+
+            anyWindow = false;
             for wi = 1:nW
                 wm = windowThisMetric(iRec, 1, wi);
                 if isnan(wm), continue; end
                 data{wi, ci}(ai) = (wm - bm) / bm;
+                anyWindow = true;
             end
+            if anyWindow
+                condUsable(ci) = true;
+            else
+                reasons{end+1,1} = sprintf( ...
+                    '%s / animal=%s : every recovery-window mean is NaN for %s', ...
+                    cond, aniName, briefName(state.files{iRec})); %#ok<AGROW>
+            end
+        end
+    end
+
+    blankCols = find(~condUsable);
+    if ~isempty(blankCols)
+        fprintf('[%s — group %d] !! BLANK column(s) in plot:\n', ...
+            displayLabel(spec), groupIdx);
+        for n = 1:numel(blankCols)
+            fprintf('    condition "%s" has no usable (baseline, recovery) pair\n', ...
+                conds{blankCols(n)});
+        end
+    end
+
+    if ~isempty(reasons)
+        fprintf('[%s — group %d] %d animal-condition(s) excluded:\n', ...
+            displayLabel(spec), groupIdx, numel(reasons));
+        for n = 1:min(20, numel(reasons))
+            fprintf('    %s\n', reasons{n});
+        end
+        if numel(reasons) > 20
+            fprintf('    ... (+%d more)\n', numel(reasons) - 20);
         end
     end
 
@@ -319,6 +374,13 @@ function u = uniqueStable(c)
     [~, ia] = unique(c, 'stable');
     u = c(sort(ia));
 end
+
+function s = briefName(fp)
+    [~, b, e] = fileparts(char(fp));
+    s = [b e];
+end
+
+function out = ternary(c, a, b), if c, out = a; else, out = b; end, end
 
 
 % ==========================================================================
