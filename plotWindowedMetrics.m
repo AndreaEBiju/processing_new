@@ -451,13 +451,57 @@ function saveFigureAllFormats(fig, outDir)
     if isempty(safe), safe = sprintf('figure_%d', fig.Number); end
     base = fullfile(outDir, safe);
 
+    % .fig keeps the on-screen theme
     try, savefig(fig, [base '.fig']); catch ME
         warning('plotWindowedMetrics:saveFig','.fig save failed: %s', ME.message);
     end
-    try, exportgraphics(fig, [base '.png'], 'Resolution', 200); catch ME
+
+    % Force white background for PNG/SVG regardless of theme
+    origFigColor = get(fig, 'Color');
+    origInvert   = get(fig, 'InvertHardcopy');
+    set(fig, 'Color', 'w', 'InvertHardcopy', 'off');
+    axList = findall(fig, 'Type', 'axes');
+    origAxColors = cell(numel(axList),1);
+    for k = 1:numel(axList)
+        origAxColors{k} = get(axList(k), 'Color');
+        set(axList(k), 'Color', 'w');
+    end
+    cleanupRestore = onCleanup(@() restoreFigColors( ...
+        fig, origFigColor, origInvert, axList, origAxColors)); %#ok<NASGU>
+
+    try
+        exportgraphics(fig, [base '.png'], ...
+            'Resolution', 200, 'BackgroundColor', 'white');
+    catch ME
         warning('plotWindowedMetrics:savePng','.png save failed: %s', ME.message);
     end
-    try, print(fig, [base '.svg'], '-dsvg', '-vector'); catch ME
-        warning('plotWindowedMetrics:saveSvg','.svg save failed: %s', ME.message);
+
+    svgOk = false;
+    try
+        exportgraphics(fig, [base '.svg'], ...
+            'ContentType', 'vector', 'BackgroundColor', 'white');
+        svgOk = true;
+    catch
+    end
+    if ~svgOk
+        try, print(fig, [base '.svg'], '-dsvg', '-vector'); catch ME
+            warning('plotWindowedMetrics:saveSvg','.svg save failed: %s', ME.message);
+        end
+    end
+end
+
+
+function restoreFigColors(fig, figColor, invert, axList, axColors)
+    try
+        if isgraphics(fig)
+            set(fig, 'Color', figColor, 'InvertHardcopy', invert);
+        end
+    catch, end
+    for k = 1:numel(axList)
+        try
+            if isgraphics(axList(k))
+                set(axList(k), 'Color', axColors{k});
+            end
+        catch, end
     end
 end

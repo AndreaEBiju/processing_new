@@ -298,9 +298,9 @@ end
 % =========================== misc ========================================
 % ==========================================================================
 function saveFigureAllFormats(fig, outDir)
-% Save one figure in .fig, .png, and .svg into outDir, using a sanitised
-% version of the figure's Name as the basename. Each format is wrapped
-% in its own try/catch so a single failure doesn't abort the loop.
+% Save one figure in .fig (current theme preserved), .png, and .svg
+% (both forced to white background). Each format is wrapped in its own
+% try/catch so a single failure doesn't abort the loop.
     name = char(get(fig, 'Name'));
     if isempty(name), name = sprintf('figure_%d', fig.Number); end
     safe = regexprep(name, '[^\w\-.()% ]', '_');
@@ -310,23 +310,70 @@ function saveFigureAllFormats(fig, outDir)
     if isempty(safe), safe = sprintf('figure_%d', fig.Number); end
     base = fullfile(outDir, safe);
 
+    % --- .fig first: preserves whatever theme is on screen ---
     try
         savefig(fig, [base '.fig']);
     catch ME
         warning('plotAveragedMetrics:saveFig', ...
             '.fig save failed for %s: %s', safe, ME.message);
     end
+
+    % --- force white background for the raster/vector exports ---
+    origFigColor = get(fig, 'Color');
+    origInvert   = get(fig, 'InvertHardcopy');
+    set(fig, 'Color', 'w', 'InvertHardcopy', 'off');
+    axList = findall(fig, 'Type', 'axes');
+    origAxColors = cell(numel(axList),1);
+    for k = 1:numel(axList)
+        origAxColors{k} = get(axList(k), 'Color');
+        set(axList(k), 'Color', 'w');
+    end
+    cleanupRestore = onCleanup(@() restoreFigColors( ...
+        fig, origFigColor, origInvert, axList, origAxColors));
+
+    % --- PNG ---
     try
-        exportgraphics(fig, [base '.png'], 'Resolution', 200);
+        exportgraphics(fig, [base '.png'], ...
+            'Resolution', 200, 'BackgroundColor', 'white');
     catch ME
         warning('plotAveragedMetrics:savePng', ...
             '.png save failed for %s: %s', safe, ME.message);
     end
+
+    % --- SVG: try exportgraphics first (R2024a+ supports ContentType
+    %         vector for .svg, white BG, no InvertHardcopy warning).
+    %         Fall back to print on older releases.
+    svgOk = false;
     try
-        print(fig, [base '.svg'], '-dsvg', '-vector');
-    catch ME
-        warning('plotAveragedMetrics:saveSvg', ...
-            '.svg save failed for %s: %s', safe, ME.message);
+        exportgraphics(fig, [base '.svg'], ...
+            'ContentType', 'vector', 'BackgroundColor', 'white');
+        svgOk = true;
+    catch
+        % older MATLAB; fall back below
+    end
+    if ~svgOk
+        try
+            print(fig, [base '.svg'], '-dsvg', '-vector');
+        catch ME
+            warning('plotAveragedMetrics:saveSvg', ...
+                '.svg save failed for %s: %s', safe, ME.message);
+        end
+    end
+end
+
+
+function restoreFigColors(fig, figColor, invert, axList, axColors)
+    try
+        if isgraphics(fig)
+            set(fig, 'Color', figColor, 'InvertHardcopy', invert);
+        end
+    catch, end
+    for k = 1:numel(axList)
+        try
+            if isgraphics(axList(k))
+                set(axList(k), 'Color', axColors{k});
+            end
+        catch, end
     end
 end
 
