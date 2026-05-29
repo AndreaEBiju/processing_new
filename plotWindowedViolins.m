@@ -104,11 +104,11 @@ function plotWindowedViolins()
         if ~isnan(v) && v >= 0, autoCloseSec = v; end
     end
 
-    %% ---- compute (shared cache with plotWindowedMetrics) ----
-    windowedCacheFile = fullfile(here, 'gemsplots_windowed_cache.mat');
+    %% ---- compute (shared series cache with plotWindowedMetrics + plotTimeTraces) ----
+    seriesCacheFile = fullfile(here, 'gemsplots_series_cache.mat');
     [baselineByFile, windowByFile, hitCount, loadCount] = ...
-        loadAllWindowedCached(state, metricSpecs, winSecs, windowedCacheFile);
-    fprintf('[plotWindowedViolins] Time-series values ready: %d cache hit(s), %d fresh load(s).\n', ...
+        loadAllWindowedCached(state, metricSpecs, winSecs, seriesCacheFile);
+    fprintf('[plotWindowedViolins] Series values ready: %d cache hit(s), %d fresh load(s).\n', ...
         hitCount, loadCount);
 
     %% ---- render ----

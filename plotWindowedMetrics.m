@@ -151,11 +151,11 @@ function plotWindowedMetrics()
         if ~isnan(v) && v >= 0, autoCloseSec = v; end
     end
 
-    %% ---- compute baseline means + windowed recovery means (cached + parallel) ----
-    windowedCacheFile = fullfile(here, 'gemsplots_windowed_cache.mat');
+    %% ---- compute baseline means + windowed recovery means (shared series cache) ----
+    seriesCacheFile = fullfile(here, 'gemsplots_series_cache.mat');
     [baselineByFile, windowByFile, hitCount, loadCount] = ...
-        loadAllWindowedCached(state, metricSpecs, winSecs, windowedCacheFile);
-    fprintf(['[plotWindowedMetrics] Time-series values ready: ' ...
+        loadAllWindowedCached(state, metricSpecs, winSecs, seriesCacheFile);
+    fprintf(['[plotWindowedMetrics] Series values ready: ' ...
              '%d cache hit(s), %d fresh load(s).\n'], hitCount, loadCount);
 
     %% ---- render ----
