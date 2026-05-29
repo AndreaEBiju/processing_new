@@ -182,11 +182,12 @@ function figH = renderViolinFigure(state, animalsAll, conds, spec, ...
     nW = numel(winSecs);
     nAn = numel(animalsAll);
 
-    % data{wi, ci}(ai) = normalised window value
-    data = cell(nW, nC);
-    for wi = 1:nW
-        for ci = 1:nC
-            data{wi,ci} = nan(nAn,1);
+    % data{ci, wi}(ai) = normalised window value  — same layout as
+    % plotWindowedMetrics (conditions on x, windows as subgroups).
+    data = cell(nC, nW);
+    for ci = 1:nC
+        for wi = 1:nW
+            data{ci,wi} = nan(nAn,1);
         end
     end
 
@@ -232,7 +233,7 @@ function figH = renderViolinFigure(state, animalsAll, conds, spec, ...
             for wi = 1:nW
                 wm = windowThisMetric(iRec, 1, wi);
                 if isnan(wm), continue; end
-                data{wi, ci}(ai) = (wm - bm) / bm;
+                data{ci, wi}(ai) = (wm - bm) / bm;
                 anyWindow = true;
             end
             if anyWindow
@@ -281,11 +282,11 @@ function figH = renderViolinFigure(state, animalsAll, conds, spec, ...
     end
 
     boxViolinPlot(data, ...
-        'GroupLabels',    winLabels, ...     % x-axis = windows
-        'SubgroupLabels', conds, ...         % colored sub-violins = conditions
+        'GroupLabels',    conds, ...         % x-axis = conditions
+        'SubgroupLabels', winLabels, ...     % colored sub-violins = windows
         'YLabel',         yLab, ...
-        'XLabel',         'Window of recovery', ...
-        'Title',          sprintf('%s — group %d (windowed spread)', ...
+        'XLabel',         sprintf('Group %d', groupIdx), ...
+        'Title',          sprintf('%s — group %d (windowed spread, baseline-normalised)', ...
                                   dispLab, groupIdx), ...
         'ShowScatter',    true, ...
         'MarkerSize',     40, ...
