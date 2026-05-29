@@ -43,6 +43,19 @@ function plotAveragedMetrics()
     fprintf('[plotAveragedMetrics] Saving groups to cache (%d group(s)).\n', ...
         numel(groups));
     save(cacheFile, '-struct', 'state');
+
+    %% ---- validate groups against queue conditions ----
+    queueConds = unique(state.condition);
+    allGroupConds = unique(horzcat(groups{:}));
+    unknown = setdiff(allGroupConds, queueConds);
+    if ~isempty(unknown)
+        fprintf('[plotAveragedMetrics] !! UNKNOWN condition(s) in groups (not in queue, will plot blank):\n');
+        for k = 1:numel(unknown)
+            fprintf('     %s\n', unknown{k});
+        end
+        fprintf('   Detected queue conditions: %s\n', strjoin(queueConds, ', '));
+        fprintf('   Likely typo — edit groups via the UI and re-run.\n');
+    end
     fprintf('[plotAveragedMetrics] Cache saved. About to call defineMetricsUI...\n');
 
     %% ---- metrics UI ----
@@ -352,12 +365,19 @@ function saveFigureAllFormats(fig, outDir)
         % older MATLAB; fall back below
     end
     if ~svgOk
+        % print's SVG path emits 'Ignoring InvertHardCopy' as a noisy
+        % informational warning on R2024a+. The output is still correct
+        % (our forced fig.Color='w' + axes Color='w' make it white).
+        % Suppress the spam.
+        wState = warning('off', 'all');
         try
             print(fig, [base '.svg'], '-dsvg', '-vector');
         catch ME
+            warning(wState);
             warning('plotAveragedMetrics:saveSvg', ...
                 '.svg save failed for %s: %s', safe, ME.message);
         end
+        warning(wState);
     end
 end
 

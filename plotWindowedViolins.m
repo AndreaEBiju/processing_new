@@ -31,6 +31,19 @@ function plotWindowedViolins()
     state.groups = groups;
     save(cacheFile, '-struct', 'state');
 
+    %% ---- validate groups against queue conditions ----
+    queueConds = unique(state.condition);
+    allGroupConds = unique(horzcat(groups{:}));
+    unknown = setdiff(allGroupConds, queueConds);
+    if ~isempty(unknown)
+        fprintf('[plotWindowedViolins] !! UNKNOWN condition(s) in groups (not in queue, will plot blank):\n');
+        for k = 1:numel(unknown)
+            fprintf('     %s\n', unknown{k});
+        end
+        fprintf('   Detected queue conditions: %s\n', strjoin(queueConds, ', '));
+        fprintf('   Likely typo — edit groups via the UI and re-run.\n');
+    end
+
     %% ---- metrics (same as plotWindowedMetrics) ----
     metricSpecs = defineMetricsUI(cacheFile, defaultWindowedMetricSpecs());
     if isempty(metricSpecs), fprintf('No metrics. Exiting.\n'); return; end
@@ -353,9 +366,12 @@ function saveFigureAllFormats(fig, outDir)
     catch
     end
     if ~svgOk
+        wState = warning('off', 'all');
         try, print(fig, [base '.svg'], '-dsvg', '-vector'); catch ME
+            warning(wState);
             warning('plotWindowedViolins:saveSvg','.svg save failed: %s', ME.message);
         end
+        warning(wState);
     end
 end
 
