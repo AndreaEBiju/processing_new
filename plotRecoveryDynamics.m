@@ -3,13 +3,17 @@ function plotRecoveryDynamics()
 % Dashboard_Guide) plotted as box+scatter per condition, one figure per
 % (metric, user-group), with the four features in a 2x2 tiled layout.
 %
-% Features extracted from each animal's RECOVERY time series y(t)
-% (where t starts at the first valid sample):
-%   peakExc    = max(y) - min(y)
-%   slope30    = OLS slope of y(t) on t in [0, 30 s]
-%   final30Mean = mean of y over the last 30 s of valid signal
-%   AUCdev     = integral of |y - final30Mean| over the whole recovery
-%                (trapezoidal, in metric x seconds)
+% Features extracted from each animal's BASELINE-NORMALISED recovery
+% time series (consistent with plotWindowedMetrics):
+%   y_norm(t) = (y_recovery(t) - mu_baseline) / mu_baseline
+% where mu_baseline is the mean of the matching animal's baseline
+% series for the same metric. Then on y_norm:
+%   peakExc      = max(y_norm) - min(y_norm)         (fractional)
+%   slope30      = OLS slope of y_norm(t), t in [0, 30 s]   (1/s)
+%   final30Mean  = mean of y_norm over last 30 s     (fractional)
+%   AUCdev       = trapz(|y_norm - final30Mean|, t)   (seconds)
+% Features stay NaN whenever the matching baseline is missing, the
+% baseline mean is NaN/zero, or the recovery series is too short.
 %
 % Each panel: conditions on x (only this user-group's conditions),
 % baseline NOT plotted (these features describe the recovery on its
@@ -163,11 +167,17 @@ end
 % ==========================================================================
 function features = computeDynFeatures(state, metricSpecs, seriesByFile)
 % For every RECOVERY file × every metric, compute the four dynamic
-% features from section 5 of the Dashboard_Guide.
+% features from section 5 of the Dashboard_Guide on the BASELINE-
+% NORMALISED recovery trace:
+%   y_norm = (y_recovery - mu_baseline) / mu_baseline
+% Each animal's matching baseline file (same condition + same animal)
+% provides mu_baseline = mean(y_baseline, 'omitnan').
 %
-% Returns a struct with fields .peakExc, .slope30, .final30Mean, .AUCdev,
-% each nFiles x nMetrics. Baseline files and any file with no valid
-% series stay NaN throughout.
+% Returns a struct with fields .peakExc, .slope30, .final30Mean,
+% .AUCdev, each nFiles x nMetrics. Indexed by recovery-file row;
+% baseline rows stay NaN. NaN where no matching baseline is in the
+% queue, where mu_baseline is NaN or zero, or where the recovery
+% series has fewer than 5 valid samples.
 
     nFiles   = numel(state.files);
     nMetrics = numel(metricSpecs);
@@ -176,10 +186,31 @@ function features = computeDynFeatures(state, metricSpecs, seriesByFile)
     features.final30Mean = nan(nFiles, nMetrics);
     features.AUCdev      = nan(nFiles, nMetrics);
 
-    isRec = strcmpi(state.phase, 'recovery');
+    % File-level mean of the BASELINE series (used as mu_baseline)
+    isBase = strcmpi(state.phase, 'baseline');
+    isRec  = strcmpi(state.phase, 'recovery');
+    fileBaseMean = nan(nFiles, nMetrics);
+    for i = 1:nFiles
+        if ~isBase(i), continue; end
+        for k = 1:nMetrics
+            s = seriesByFile{i,k};
+            if isempty(s) || isempty(s.y), continue; end
+            fileBaseMean(i,k) = mean(s.y, 'omitnan');
+        end
+    end
+
     for i = 1:nFiles
         if ~isRec(i), continue; end
+        % Find this animal's matching baseline file for the same condition
+        iBase = find( strcmpi(state.condition, state.condition{i}) & ...
+                      strcmpi(state.animal,    state.animal{i})    & ...
+                      isBase, 1);
+        if isempty(iBase), continue; end
+
         for k = 1:nMetrics
+            bm = fileBaseMean(iBase, k);
+            if isnan(bm) || bm == 0, continue; end
+
             s = seriesByFile{i,k};
             if isempty(s) || isempty(s.y) || isempty(s.t), continue; end
             y = double(s.y(:));
@@ -189,26 +220,29 @@ function features = computeDynFeatures(state, metricSpecs, seriesByFile)
             y = y(valid);  t = t(valid);
             t = t - t(1);                                     % anchor to 0
 
-            features.peakExc(i,k) = max(y) - min(y);
+            % Normalise: fractional deviation from baseline
+            yN = (y - bm) / bm;
 
-            % First 30 s slope (OLS)
+            features.peakExc(i,k) = max(yN) - min(yN);
+
+            % First 30 s OLS slope of the normalised trace
             sel = t <= 30;
             if sum(sel) >= 3
-                p = polyfit(t(sel), y(sel), 1);
-                features.slope30(i,k) = p(1);
+                p = polyfit(t(sel), yN(sel), 1);
+                features.slope30(i,k) = p(1);                % 1/s
             end
 
-            % Final 30 s mean
+            % Final 30 s mean of the normalised trace
             tEnd = t(end);
             sel = t >= (tEnd - 30);
             if any(sel)
-                features.final30Mean(i,k) = mean(y(sel));
+                features.final30Mean(i,k) = mean(yN(sel));
             end
 
-            % AUC of |y - final30Mean|
+            % AUC of |yN - final30Mean|, integrating in seconds
             if ~isnan(features.final30Mean(i,k))
-                dev = abs(y - features.final30Mean(i,k));
-                features.AUCdev(i,k) = trapz(t, dev);
+                dev = abs(yN - features.final30Mean(i,k));
+                features.AUCdev(i,k) = trapz(t, dev);        % seconds
             end
         end
     end
@@ -233,18 +267,17 @@ function figH = renderDynFigure(state, animalsAll, conds, spec, groupIdx, kMetri
     featNames  = {'peakExc',          'slope30',           'final30Mean',          'AUCdev'};
     featLabels = {'Peak excursion',   'First-30 s slope',  'Final-30 s mean',      'AUC of deviation'};
 
-    unitsOut = strtrim(char(getf(spec,'unitsOut')));
-    if isempty(unitsOut)
-        unitFor = repmat({''}, 1, 4);
-    else
-        unitFor = { ...
-            unitsOut, ...                                  % peakExc -> same units
-            sprintf('%s / s', unitsOut), ...               % slope30
-            unitsOut, ...                                  % final30Mean
-            sprintf('%s\\cdot s', unitsOut) };             % AUCdev (kept simple)
-        % use plain text instead of LaTeX:
-        unitFor{4} = sprintf('%s*s', unitsOut);
-    end
+    % All features are computed on the BASELINE-NORMALISED trace
+    % y_norm = (y_rec - base_mean) / base_mean, so units are:
+    %   peakExc      -> dimensionless (fractional)
+    %   slope30      -> 1/s
+    %   final30Mean  -> dimensionless (fractional)
+    %   AUCdev       -> s
+    unitFor = { ...
+        'fractional', ...     % peakExc
+        '1/s', ...            % slope30
+        'fractional', ...     % final30Mean
+        's' };                % AUCdev
 
     dispLab = displayLabel(spec);
     figName = sprintf('dyn - group%d - %s', groupIdx, dispLab);
@@ -252,8 +285,8 @@ function figH = renderDynFigure(state, animalsAll, conds, spec, groupIdx, kMetri
         'Position', [60 60 1400 900]);
 
     tl = tiledlayout(figH, 2, 2, 'TileSpacing','compact', 'Padding','compact');
-    title(tl, sprintf('%s — group %d  (recovery dynamics features)', dispLab, groupIdx), ...
-        'Interpreter','none');
+    title(tl, sprintf('%s — group %d  (recovery dynamics, baseline-normalised)', ...
+        dispLab, groupIdx), 'Interpreter','none');
 
     % Build per-feature, per-condition vectors over all queued animals
     % (one entry per animal; NaN where no recovery file present)
