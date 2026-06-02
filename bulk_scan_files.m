@@ -39,11 +39,7 @@ function files = bulk_scan_files(folders, conv)
                 if ~isempty(exclSub) && contains(name, exclSub, 'IgnoreCase',true); continue; end
                 stem = name(1:end-numel([sufN '.mat']));
                 neural = fullfile(hits(k).folder, name);
-                hrbr   = fullfile(hits(k).folder, [stem sufH '.mat']);
-                if ~exist(hrbr,'file')
-                    alt = dir(fullfile(hits(k).folder, [stem '*HRBR*.mat']));
-                    if ~isempty(alt); hrbr = fullfile(alt(1).folder, alt(1).name); else; hrbr = ''; end
-                end
+                hrbr   = resolve_hrbr(neural, phase, conv);   %#ok<NASGU> robust HRBR finder
                 [ani, cond] = parse_stem(stem);
                 files(end+1) = struct('neural',neural,'hrbr',hrbr,'stem',stem, ...
                     'animal',ani,'condition',cond,'phase',phase); %#ok<AGROW>

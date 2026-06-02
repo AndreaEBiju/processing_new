@@ -84,7 +84,7 @@ function files = bulk_queue_ui(conv, cacheFile)
             an = field_at(S,'animal',i,'');
             cd = field_at(S,'condition',i,'');
             [~, bn] = fileparts(np);
-            sf(end+1) = struct('neural',np,'hrbr',hrbr_for(np,ph,conv),'stem',bn, ...
+            sf(end+1) = struct('neural',np,'hrbr',resolve_hrbr(np,ph,conv),'stem',bn, ...
                 'animal',an,'condition',cd,'phase',ph); %#ok<AGROW>
         end
         appendScan(sf);
@@ -109,34 +109,16 @@ end
 
 % ----------------------------------------------------------------------
 function row = guess_one(np, conv)
-    [folder, base] = fileparts(np);
-    phase = ''; stem = base; hrbr = '';
+    [~, base] = fileparts(np);
+    phase = ''; stem = base;
     if endsWith(base, conv.sufRecNeural)
         phase = 'recovery'; stem = base(1:end-numel(conv.sufRecNeural));
-        hrbr = fullfile(folder, [stem conv.sufRecHRBR '.mat']);
     elseif endsWith(base, conv.sufBaseNeural) && ~contains(base,'stim_rec','IgnoreCase',true)
         phase = 'baseline'; stem = base(1:end-numel(conv.sufBaseNeural));
-        hrbr = fullfile(folder, [stem conv.sufBaseHRBR '.mat']);
     end
-    if ~isempty(hrbr) && ~exist(hrbr,'file'); hrbr = ''; end
+    if ~isempty(phase); hrbr = resolve_hrbr(np, phase, conv); else; hrbr = ''; end
     [ani, cond] = parse_stem_local(stem);
     row = struct('neural',np,'hrbr',hrbr,'stem',stem,'animal',ani,'condition',cond,'phase',phase);
-end
-
-function hr = hrbr_for(np, phase, conv)
-% derive the HRBR sibling for an imported neural path, given its phase + conv
-    [folder, base] = fileparts(np);
-    if strcmpi(phase,'recovery')
-        if endsWith(base, conv.sufRecNeural); stem = base(1:end-numel(conv.sufRecNeural)); else; stem = base; end
-        hr = fullfile(folder, [stem conv.sufRecHRBR '.mat']);
-    else
-        if endsWith(base, conv.sufBaseNeural); stem = base(1:end-numel(conv.sufBaseNeural)); else; stem = base; end
-        hr = fullfile(folder, [stem conv.sufBaseHRBR '.mat']);
-    end
-    if ~exist(hr,'file')
-        alt = dir(fullfile(folder, [stem '*HRBR*.mat']));
-        if ~isempty(alt); hr = fullfile(alt(1).folder, alt(1).name); else; hr = ''; end
-    end
 end
 
 function v = field_at(S, name, i, default)
