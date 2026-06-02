@@ -108,14 +108,15 @@ function out = run_pipeline_bulk(P, opts)
     if ~isempty(groups)
         for ci2 = 1:2
             chL = loadOpts.labels{ci2};
-            for m = 1:numel(opts.metricsBox)
-                bulk_plot_boxviolin(normRows, groups, opts.metricsBox{m}, chL);
+            for m = 1:numel(opts.metricsBox)     % windowed box-violins (1/2/5/10min/full)
+                bulk_plot_windowed(rawRows, groups, opts.metricsBox{m}, chL);
             end
             bulk_plot_fano_box(normRows, groups, chL);
             for m = 1:numel(opts.metricsSyn)
                 bulk_plot_synergy(normRows, opts.metricsSyn{m}, chL);
             end
         end
+        bulk_plot_windowed_total(rawRows, groups);   % combined (LVN+RVN) rate, windowed
     else
         fprintf('[bulk] groups not set. Render later, e.g.:\n');
         fprintf('   bulk_plot_boxviolin(out.norm, groups, ''rate'', ''RVN'');\n');
@@ -159,7 +160,7 @@ end
 % ---- per-channel harvest (raw distributions + means + fano slope) ----
 function r = empty_row()
     r = struct('animal','','condition','','phase','','label','', ...
-        'dist',struct('rate',[],'vpp',[],'fwhm',[],'cv2',[]), ...
+        'dist',struct('rate',[],'rate_t',[],'vpp',[],'fwhm',[],'spk_t',[],'cv2',[],'cv2_t',[]), ...
         'mean',struct('rate',NaN,'excess',NaN,'vpp',NaN,'fwhm',NaN,'cv2',NaN), ...
         'fanoSlope',NaN);
 end
@@ -170,14 +171,16 @@ function r = harvest_channel(D, Rf, k, animal, condition, phase)
     fs = D.fs; valid = D.validMask(:,k);
     if isfield(D,'metrics') && numel(D.metrics)>=k && ~isempty(D.metrics(k).fr_hz)
         r.dist.rate = D.metrics(k).fr_hz(:);
+        if isfield(D.metrics,'fr_t'); r.dist.rate_t = D.metrics(k).fr_t(:); end
     end
     if isfield(D.spikes,'Vpp_uv');   r.dist.vpp  = D.spikes(k).Vpp_uv(:);   end
     if isfield(D.spikes,'width_ms'); r.dist.fwhm = D.spikes(k).width_ms(:); end
     if isfield(D.spikes,'alignedTimes') && ~isempty(D.spikes(k).alignedTimes)
+        r.dist.spk_t = D.spikes(k).alignedTimes(:);          % spike times (s)
         cen = round(D.spikes(k).alignedTimes(:)*fs)+1;
     elseif isfield(D.spikes,'times'); cen = round(D.spikes(k).times(:)*fs)+1;
     else; cen = []; end
-    r.dist.cv2 = cv2_clean(cen, valid);
+    [r.dist.cv2, r.dist.cv2_t] = cv2_clean(cen, valid, fs);
     if isfield(D,'metrics') && numel(D.metrics)>=k;   r.mean.rate   = D.metrics(k).meanRate_hz; end
     if isfield(D,'envelope') && numel(D.envelope)>=k; r.mean.excess = D.envelope(k).meanExcess_uv; end
     r.mean.vpp  = median(r.dist.vpp,'omitnan');
@@ -186,8 +189,11 @@ function r = harvest_channel(D, Rf, k, animal, condition, phase)
     if ~isempty(Rf) && numel(Rf)>=k && isfield(Rf,'slopeNorm'); r.fanoSlope = Rf(k).slopeNorm; end
 end
 
-function cv2 = cv2_clean(cen, valid)
-    cv2 = [];
+function [cv2, cv2t] = cv2_clean(cen, valid, fs)
+% per-pair CV2 from gap-clean consecutive ISIs + the time (s) of each pair's
+% middle spike (used for within-recovery windowing).
+    cv2 = []; cv2t = [];
+    if nargin < 3 || isempty(fs); fs = 1; end
     cen = sort(cen(:)); cen = cen(cen>=1 & cen<=numel(valid));
     if numel(cen) < 3; return; end
     cvv = [0; cumsum(double(valid(:)))];
@@ -196,7 +202,10 @@ function cv2 = cv2_clean(cen, valid)
     for i = 1:numel(isi)-1
         if isClean(i) && isClean(i+1)
             a = isi(i); b = isi(i+1);
-            if (a+b)>0; cv2(end+1,1) = 2*abs(b-a)/(a+b); end %#ok<AGROW>
+            if (a+b)>0
+                cv2(end+1,1)  = 2*abs(b-a)/(a+b);    %#ok<AGROW>
+                cv2t(end+1,1) = (cen(i+1)-1)/fs;     %#ok<AGROW>
+            end
         end
     end
 end
