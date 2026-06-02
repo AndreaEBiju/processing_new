@@ -28,6 +28,7 @@ function out = run_pipeline_bulk(P, opts)
     if ~isfield(opts,'metricsBox');   opts.metricsBox = {'rate','vpp','fwhm','cv2'}; end
     if ~isfield(opts,'metricsSyn');   opts.metricsSyn = {'rate','excess','vpp','fwhm','cv2'}; end
     if ~isfield(opts,'perFileFigures'); opts.perFileFigures = true; end   % false = fast metrics-only
+    if ~isfield(opts,'saveFigsDir');  opts.saveFigsDir = ''; end          % save combined plots here (png/svg/fig)
     cf = opts.cacheFile;
 
     conv = bulk_conventions_ui(cf);
@@ -40,21 +41,22 @@ function out = run_pipeline_bulk(P, opts)
     loadOpts = struct('neuralCols',[conv.rvnCol conv.lvnCol], 'labels',{{'RVN','LVN'}}, 'rVar',conv.heartVar);
     fprintf('[cache] file: %s\n[cache] %d entr(y/ies) loaded.\n', cf, numel(harvest));
 
-    % which files need (re)processing?
+    % which files need (re)processing? central cache -> per-file .mat -> reprocess
+    SCHEMA = veng_schema();
     mtimes = nan(numel(files),1); need = false(numel(files),1);
     for f = 1:numel(files)
         di = dir(files(f).neural); if ~isempty(di); mtimes(f) = di.datenum; end
+        if opts.forceRefresh; need(f) = true; continue; end
         ci = find_cache(harvest, files(f).neural);
-        if isempty(ci)
-            need(f) = true;
-        elseif opts.forceRefresh
-            need(f) = true;
-        elseif harvest(ci).mtime ~= mtimes(f)
-            need(f) = true;
-            fprintf('[cache] mtime changed -> reprocess: %s\n', files(f).stem);
-        else
-            need(f) = false;
+        if ~isempty(ci) && harvest(ci).mtime == mtimes(f) && harvest(ci).schema == SCHEMA
+            need(f) = false; continue;                      % in-memory/central cache hit
         end
+        pf = load_perfile(files(f).neural, mtimes(f), SCHEMA);   % <base>_vengmetrics.mat next to file
+        if ~isempty(pf)
+            harvest = put_cache(harvest, files(f).neural, mtimes(f), pf);
+            need(f) = false; continue;
+        end
+        need(f) = true;
     end
     proc = find(need);
     fprintf('[bulk] %d cached (skipped), %d to process.\n', numel(files)-numel(proc), numel(proc));
@@ -91,7 +93,10 @@ function out = run_pipeline_bulk(P, opts)
         ci = find_cache(harvest, files(f).neural);
         if isempty(ci); continue; end
         rws = harvest(ci).rows;
-        for k = 1:numel(rws); rawRows(end+1) = rws(k); end %#ok<AGROW>
+        for k = 1:numel(rws)
+            if ~isfield(rws(k).dist,'rate_t'); continue; end   % skip rows from a pre-timing cache
+            rawRows(end+1) = rws(k); %#ok<AGROW>
+        end
     end
     if isempty(rawRows); fprintf('Nothing harvested.\n'); out = []; return; end
 
@@ -108,8 +113,9 @@ function out = run_pipeline_bulk(P, opts)
     if ~isempty(groups)
         for ci2 = 1:2
             chL = loadOpts.labels{ci2};
-            for m = 1:numel(opts.metricsBox)     % windowed box-violins (1/2/5/10min/full)
-                bulk_plot_windowed(rawRows, groups, opts.metricsBox{m}, chL);
+            for m = 1:numel(opts.metricsBox)
+                bulk_plot_boxviolin(normRows, groups, opts.metricsBox{m}, chL);  % full-duration
+                bulk_plot_windowed(rawRows,  groups, opts.metricsBox{m}, chL);   % 1/2/5/10min/full
             end
             bulk_plot_fano_box(normRows, groups, chL);
             for m = 1:numel(opts.metricsSyn)
@@ -117,6 +123,11 @@ function out = run_pipeline_bulk(P, opts)
             end
         end
         bulk_plot_windowed_total(rawRows, groups);   % combined (LVN+RVN) rate, windowed
+        if ~isempty(opts.saveFigsDir)
+            if ~exist(opts.saveFigsDir,'dir'); mkdir(opts.saveFigsDir); end
+            save_all_figures(opts.saveFigsDir, 'bulk', {'png','svg','fig'});
+            fprintf('[bulk] saved combined figures to %s\n', opts.saveFigsDir);
+        end
     else
         fprintf('[bulk] groups not set. Render later, e.g.:\n');
         fprintf('   bulk_plot_boxviolin(out.norm, groups, ''rate'', ''RVN'');\n');
@@ -154,6 +165,15 @@ function rows = process_and_harvest(F, P, loadOpts, makeFigs)
     rows = repmat(empty_row(), numel(D.neuralChannels), 1);
     for k = 1:numel(D.neuralChannels)
         rows(k) = harvest_channel(D, Rf, k, F.animal, F.condition, F.phase);
+    end
+    % persist per-file metrics next to the neural file, so later runs/plots read
+    % them without recomputing -- even if the central cache is deleted.
+    try
+        [nfDir, nfBase] = fileparts(F.neural);
+        rows_ = rows; srcMtime = file_mtime(F.neural); schema = veng_schema(); %#ok<NASGU>
+        save(fullfile(nfDir, [nfBase '_vengmetrics.mat']), 'rows_', 'srcMtime', 'schema');
+    catch ME
+        warning('bulk:perfile','per-file metrics save failed for %s (%s)', F.stem, ME.message);
     end
 end
 
@@ -211,11 +231,15 @@ function [cv2, cv2t] = cv2_clean(cen, valid, fs)
 end
 
 % ---- cache helpers ----
+function s = veng_schema(); s = 2; end   % bump when the harvested row schema changes
+
 function harvest = load_harvest(cf)
     harvest = bulk_cache_get(cf, 'harvest');
     if isempty(harvest) || ~isstruct(harvest)
-        harvest = struct('neuralPath',{},'mtime',{},'rows',{});
+        harvest = struct('neuralPath',{},'mtime',{},'rows',{},'schema',{});
+        return;
     end
+    if ~isfield(harvest,'schema'); [harvest.schema] = deal(-1); end   % old entries -> stale
 end
 function ci = find_cache(harvest, neuralPath)
     ci = [];
@@ -223,9 +247,29 @@ function ci = find_cache(harvest, neuralPath)
     ci = find(strcmp({harvest.neuralPath}, neuralPath), 1);
 end
 function harvest = put_cache(harvest, neuralPath, mt, rows)
-    e = struct('neuralPath',neuralPath,'mtime',mt,'rows',rows);
+    e = struct('neuralPath',neuralPath,'mtime',mt,'rows',rows,'schema',veng_schema());
     ci = find_cache(harvest, neuralPath);
     if isempty(ci); harvest(end+1) = e; else; harvest(ci) = e; end
+end
+
+function rows = load_perfile(neuralPath, mt, schema)
+% read a per-file <base>_vengmetrics.mat if it is current (matching mtime+schema)
+    rows = [];
+    [d, b] = fileparts(neuralPath);
+    pf = fullfile(d, [b '_vengmetrics.mat']);
+    if ~exist(pf,'file'); return; end
+    try
+        S = load(pf);
+        if isfield(S,'schema') && isequal(S.schema,schema) && isfield(S,'srcMtime') ...
+                && isequal(S.srcMtime,mt) && isfield(S,'rows_')
+            rows = S.rows_;
+        end
+    catch
+    end
+end
+
+function mt = file_mtime(p)
+    di = dir(p); if isempty(di); mt = NaN; else; mt = di.datenum; end
 end
 function save_harvest(cf, harvest)
     bulk_cache_set(cf, 'harvest', harvest);
