@@ -1,4 +1,4 @@
-function fig = bulk_plot_windowed_total(rawRows, groups)
+function fig = bulk_plot_windowed_total(rawRows, groups, yMax)
 % BULK_PLOT_WINDOWED_TOTAL  Box+violin of TOTAL firing rate x = (LVN+RVN)/s, per
 % group, with five recovery windows (1, 2, 5, 10 min, full) per condition.
 %
@@ -9,6 +9,7 @@ function fig = bulk_plot_windowed_total(rawRows, groups)
 % Uses YOUR boxViolinPlot.m. Needs rawRows with per-bin rate + bin times
 % (reprocess once with forceRefresh if your cache predates timing).
 
+    if nargin < 3; yMax = []; end   % optional upper y-axis cap (lower stays auto)
     assert(exist('boxViolinPlot','file')==2, ['bulk_plot_windowed_total:noDep ' ...
         'boxViolinPlot.m not on path. addpath(<your processing_new folder>) first.']);
 
@@ -36,6 +37,7 @@ function fig = bulk_plot_windowed_total(rawRows, groups)
             'Title', sprintf('group %d', g));
         yline(ax, 0, 'k:', 'HandleVisibility','off');
         try, ax.XAxis.TickLabelRotation = 30; catch, end   % keep condition labels legible
+        if ~isempty(yMax); yl = ylim(ax); ylim(ax, [yl(1) yMax]); end   % cap upper y
     end
     % keep ONE shared legend, placed outside the grid (declutters the panels)
     lgs = findall(fig,'Type','legend');

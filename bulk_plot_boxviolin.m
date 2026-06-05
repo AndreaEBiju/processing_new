@@ -1,4 +1,4 @@
-function fig = bulk_plot_boxviolin(normRows, groups, metric, chLabel)
+function fig = bulk_plot_boxviolin(normRows, groups, metric, chLabel, yMax)
 % BULK_PLOT_BOXVIOLIN  Box + violin of one baseline-normalized metric, one
 % channel, laid out by group, using YOUR boxViolinPlot.m for styling.
 %
@@ -7,10 +7,13 @@ function fig = bulk_plot_boxviolin(normRows, groups, metric, chLabel)
 %   groups   : cell of groups; each a cell of condition names (defineGroupsUI form)
 %   metric   : 'rate' | 'vpp' | 'fwhm' | 'cv2'
 %   chLabel  : channel label ('RVN' | 'LVN')
+%   yMax     : optional scalar; caps the upper y-axis limit on every panel
+%              (lower limit stays automatic). [] / omitted = auto.
 %
 % Each violin holds the normalized recovery distribution for that condition,
 % pooled across animals.
 
+    if nargin < 5; yMax = []; end
     assert(exist('boxViolinPlot','file')==2, ['bulk_plot_boxviolin:noDep ' ...
         'boxViolinPlot.m not on path. addpath(<your processing_new folder>) first.']);
 
@@ -32,6 +35,7 @@ function fig = bulk_plot_boxviolin(normRows, groups, metric, chLabel)
             'YLabel', ylab, 'Title', sprintf('group %d', g));
         yline(ax, 0, 'k:', 'HandleVisibility','off');   % baseline reference
         try, ax.XAxis.TickLabelRotation = 30; catch, end   % keep condition labels legible
+        if ~isempty(yMax); yl = ylim(ax); ylim(ax, [yl(1) yMax]); end   % cap upper y
     end
     whiten_figure(fig);   % uniform style: white bg, black text, font 20
 end

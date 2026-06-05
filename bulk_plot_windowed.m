@@ -1,4 +1,4 @@
-function fig = bulk_plot_windowed(rawRows, groups, metric, chLabel)
+function fig = bulk_plot_windowed(rawRows, groups, metric, chLabel, yMax)
 % BULK_PLOT_WINDOWED  Box+violin of one metric, one channel, per group, where
 % each condition shows FIVE sub-distributions taken from increasing windows of
 % the recovery recording: first 1, 2, 5, 10 min and the full recovery.
@@ -14,6 +14,7 @@ function fig = bulk_plot_windowed(rawRows, groups, metric, chLabel)
 %
 % Uses YOUR boxViolinPlot.m (grouped G x 5 mode).
 
+    if nargin < 5; yMax = []; end   % optional upper y-axis cap (lower stays auto)
     assert(exist('boxViolinPlot','file')==2, ['bulk_plot_windowed:noDep ' ...
         'boxViolinPlot.m not on path. addpath(<your processing_new folder>) first.']);
 
@@ -41,6 +42,7 @@ function fig = bulk_plot_windowed(rawRows, groups, metric, chLabel)
             'SubgroupLabels', wlab, 'YLabel', ylab, 'Title', sprintf('group %d', g));
         yline(ax, 0, 'k:', 'HandleVisibility','off');
         try, ax.XAxis.TickLabelRotation = 30; catch, end   % keep condition labels legible
+        if ~isempty(yMax); yl = ylim(ax); ylim(ax, [yl(1) yMax]); end   % cap upper y
     end
     % keep ONE shared legend, placed outside the grid (declutters the panels)
     lgs = findall(fig,'Type','legend');

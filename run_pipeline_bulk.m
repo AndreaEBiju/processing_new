@@ -29,6 +29,7 @@ function out = run_pipeline_bulk(P, opts)
     if ~isfield(opts,'metricsSyn');   opts.metricsSyn = {'rate','excess','vpp','fwhm','cv2'}; end
     if ~isfield(opts,'perFileFigures'); opts.perFileFigures = true; end   % false = fast metrics-only
     if ~isfield(opts,'saveFigsDir');  opts.saveFigsDir = ''; end          % save combined plots here (png/svg/fig)
+    if ~isfield(opts,'rateYMax');     opts.rateYMax = []; end             % cap upper y on the firing-rate plots ([] = auto)
     cf = opts.cacheFile;
 
     conv = bulk_conventions_ui(cf);
@@ -131,15 +132,16 @@ function out = run_pipeline_bulk(P, opts)
         for ci2 = 1:2
             chL = loadOpts.labels{ci2};
             for m = 1:numel(opts.metricsBox)
-                bulk_plot_boxviolin(normRows, groups, opts.metricsBox{m}, chL);  % full-duration
-                bulk_plot_windowed(rawRows,  groups, opts.metricsBox{m}, chL);   % 1/2/5/10min/full
+                ymx = []; if strcmpi(opts.metricsBox{m},'rate'); ymx = opts.rateYMax; end  % cap rate only
+                bulk_plot_boxviolin(normRows, groups, opts.metricsBox{m}, chL, ymx);  % full-duration
+                bulk_plot_windowed(rawRows,  groups, opts.metricsBox{m}, chL, ymx);   % 1/2/5/10min/full
             end
             bulk_plot_fano_box(normRows, groups, chL);
             for m = 1:numel(opts.metricsSyn)
                 bulk_plot_synergy(normRows, opts.metricsSyn{m}, chL);
             end
         end
-        bulk_plot_windowed_total(rawRows, groups);   % combined (LVN+RVN) rate, windowed
+        bulk_plot_windowed_total(rawRows, groups, opts.rateYMax);   % combined (LVN+RVN) rate, windowed
         if ~isempty(opts.saveFigsDir)
             if ~exist(opts.saveFigsDir,'dir'); mkdir(opts.saveFigsDir); end
             save_all_figures(opts.saveFigsDir, 'bulk', {'png','svg','fig'});
