@@ -35,7 +35,7 @@ function fig = bulk_plot_boxviolin(normRows, groups, metric, chLabel, yMax)
             'YLabel', ylab, 'Title', sprintf('group %d', g));
         yline(ax, 0, 'k:', 'HandleVisibility','off');   % baseline reference
         try, ax.XAxis.TickLabelRotation = 30; catch, end   % keep condition labels legible
-        if ~isempty(yMax); yl = ylim(ax); ylim(ax, [yl(1) yMax]); end   % cap upper y
+        if ~isempty(yMax); ylim(ax, [-yMax yMax]); end   % symmetric y-axis cap about 0
     end
     whiten_figure(fig);   % uniform style: white bg, black text, font 20
 end

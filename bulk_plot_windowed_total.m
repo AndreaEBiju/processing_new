@@ -37,7 +37,7 @@ function fig = bulk_plot_windowed_total(rawRows, groups, yMax)
             'Title', sprintf('group %d', g));
         yline(ax, 0, 'k:', 'HandleVisibility','off');
         try, ax.XAxis.TickLabelRotation = 30; catch, end   % keep condition labels legible
-        if ~isempty(yMax); yl = ylim(ax); ylim(ax, [yl(1) yMax]); end   % cap upper y
+        if ~isempty(yMax); ylim(ax, [-yMax yMax]); end   % symmetric y-axis cap about 0
     end
     % keep ONE shared legend, placed outside the grid (declutters the panels)
     lgs = findall(fig,'Type','legend');
