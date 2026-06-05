@@ -102,8 +102,10 @@ function out = run_pipeline_bulk(P, opts)
 
     groups = [];
     if exist('defineGroupsUI','file')==2
-        [groups, ok] = defineGroupsUI(unique({rawRows.condition}), {});
+        prior = bulk_cache_get(cf, 'groups'); if ~iscell(prior); prior = {}; end
+        [groups, ok] = defineGroupsUI(unique({rawRows.condition}), prior);   % prefilled from cache
         if ~ok; groups = []; end
+        if ok && ~isempty(groups); bulk_cache_set(cf, 'groups', groups); end % remember for next run
     end
 
     normRows = bulk_compile(rawRows);
