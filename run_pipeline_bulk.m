@@ -121,6 +121,9 @@ function out = run_pipeline_bulk(P, opts)
             for m = 1:numel(opts.metricsSyn)
                 bulk_plot_synergy(normRows, opts.metricsSyn{m}, chL);
             end
+            for m = 1:numel(opts.metricsBox)
+                bulk_plot_me_heatmap(rawRows, opts.metricsBox{m}, chL);   % mean %-change M x E heatmap
+            end
         end
         bulk_plot_windowed_total(rawRows, groups);   % combined (LVN+RVN) rate, windowed
         if ~isempty(opts.saveFigsDir)

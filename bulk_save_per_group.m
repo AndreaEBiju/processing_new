@@ -47,13 +47,16 @@ function bulk_save_per_group(out, saveDir, formats)
         save_one_figure(f, saveDir, sprintf('totalrate_%s', tag), formats); close(f);
     end
 
-    % synergy heatmaps are not grouped -- save one per metric/channel
+    % synergy + mean-%-change heatmaps are not grouped -- save one per metric/channel
     for ci = 1:numel(chs)
         for mi = 1:numel(metrics)
             f = bulk_plot_synergy(nrm, metrics{mi}, chs{ci});
             if ~isempty(f) && isgraphics(f)
-                save_one_figure(f, saveDir, sprintf('synergy_%s_%s', metrics{mi}, chs{ci}), formats);
-                close(f);
+                save_one_figure(f, saveDir, sprintf('synergy_%s_%s', metrics{mi}, chs{ci}), formats); close(f);
+            end
+            f = bulk_plot_me_heatmap(raw, metrics{mi}, chs{ci});
+            if ~isempty(f) && isgraphics(f)
+                save_one_figure(f, saveDir, sprintf('heatmap_%s_%s', metrics{mi}, chs{ci}), formats); close(f);
             end
         end
     end
