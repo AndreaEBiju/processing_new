@@ -22,17 +22,19 @@ function save_all_figures(outDir, prefix, formats)
         nm = f.Name; if isempty(nm); nm = sprintf('figure%d', f.Number); end
         base = fullfile(outDir, sprintf('%s_%02d_%s', prefix, i, sanitize(nm)));
 
+        rf = whiten_figure(f);                  % white bg + black axis text + font 20
         if any(strcmpi(formats, 'png'))
-            try, exportgraphics(f, [base '.png'], 'Resolution', 200);
+            try, exportgraphics(f, [base '.png'], 'Resolution', 200, 'BackgroundColor','white');
             catch, try, saveas(f, [base '.png']); catch, end, end
         end
         if any(strcmpi(formats, 'svg'))
-            try, exportgraphics(f, [base '.svg'], 'ContentType', 'vector');
+            try, exportgraphics(f, [base '.svg'], 'ContentType', 'vector', 'BackgroundColor','white');
             catch, try, saveas(f, [base '.svg']); catch, end, end
         end
         if any(strcmpi(formats, 'fig'))
             try, savefig(f, [base '.fig']); catch, end
         end
+        rf();                                   % restore on-screen colors
     end
     fprintf('Saved %d figure(s) [%s] to %s\n', numel(figs), strjoin(formats, '/'), outDir);
 end

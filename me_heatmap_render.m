@@ -32,13 +32,13 @@ function fig = me_heatmap_render(Z, mL, eL, titleStr, cbLabel)
     for j = 1:nE; draw_cell(ax, j, -1, Ealone(j), mx, cmap); end
 
     % axis labels live in the gap row/column (y=0 for E, x=0 for M)
-    for j = 1:nE; text(ax, j, 0, sprintf('E%d',eL(j)), 'HorizontalAlignment','center','FontSize',12,'Color',[0.2 0.2 0.2]); end
-    for i = 1:nM; text(ax, 0, i, sprintf('M%d',mL(i)), 'HorizontalAlignment','center','FontSize',12,'Color',[0.2 0.2 0.2]); end
-    text(ax, -1, 0, 'M alone', 'HorizontalAlignment','center','FontSize',11,'FontAngle','italic','Color',[0.45 0.45 0.45]);
-    text(ax,  0,-1, 'E alone', 'HorizontalAlignment','center','FontSize',11,'FontAngle','italic','Color',[0.45 0.45 0.45]);
+    for j = 1:nE; text(ax, j, 0, sprintf('E%d',eL(j)), 'HorizontalAlignment','center','FontSize',20,'Color',[0 0 0]); end
+    for i = 1:nM; text(ax, 0, i, sprintf('M%d',mL(i)), 'HorizontalAlignment','center','FontSize',20,'Color',[0 0 0]); end
+    text(ax, -1, 0, 'M alone', 'HorizontalAlignment','center','FontSize',20,'FontAngle','italic','Color',[0 0 0]);
+    text(ax,  0,-1, 'E alone', 'HorizontalAlignment','center','FontSize',20,'FontAngle','italic','Color',[0 0 0]);
 
     xlim(ax, [-1.7, nE+0.7]); ylim(ax, [-1.7, nM+0.7]);
-    title(ax, titleStr, 'Interpreter','none');
+    title(ax, titleStr, 'Interpreter','none', 'FontSize',20, 'Color',[0 0 0]);
 
     colormap(ax, cmap); caxis(ax, [-mx mx]);
     cb = colorbar(ax); cb.Label.String = cbLabel; cb.Label.Interpreter = 'none';
@@ -56,7 +56,7 @@ function draw_cell(ax, xc, yc, v, mx, cmap)
     patch(ax, xc+[-w -w w w], yc+[-w w w -w], col, 'EdgeColor',[1 1 1], 'LineWidth',1);
     if ~isnan(v)
         tc = [0 0 0]; if abs(v)/mx > 0.55; tc = [1 1 1]; end
-        text(ax, xc, yc, sprintf('%+.0f%%', v), 'HorizontalAlignment','center', 'Color',tc, 'FontSize',12);
+        text(ax, xc, yc, sprintf('%+.0f%%', v), 'HorizontalAlignment','center', 'Color',tc, 'FontSize',20);
     end
 end
 

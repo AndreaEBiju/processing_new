@@ -6,6 +6,8 @@ function save_one_figure(fig, outDir, name, formats)
     if ~exist(outDir,'dir'); mkdir(outDir); end
     safe = regexprep(name, '[^\w\-.]', '_');
     base = fullfile(outDir, safe);
+    rf = whiten_figure(fig);                     % white bg + black axis text + font 20
+    cleanupObj = onCleanup(rf);                  % restore on-screen colors when done
     for i = 1:numel(formats)
         try
             switch lower(formats{i})
