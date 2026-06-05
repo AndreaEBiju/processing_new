@@ -17,7 +17,7 @@ function fig = bulk_plot_boxviolin(normRows, groups, metric, chLabel)
     ylab = sprintf('%s  (rec-base)/base', upper(metric));
     nG = numel(groups); nc = min(4,nG); nr = ceil(nG/nc);
     fig = figure('Color','w','Name',sprintf('%s norm box-violin — %s', metric, chLabel), ...
-        'Position',[100 100 380*nc 320*nr]);
+        'Position',[80 80 480*nc 400*nr]);
     tl = tiledlayout(fig, nr, nc, 'Padding','compact','TileSpacing','compact');
     title(tl, sprintf('%s  |  %s  |  baseline-normalized', upper(metric), chLabel), 'Interpreter','none');
 
@@ -31,6 +31,7 @@ function fig = bulk_plot_boxviolin(normRows, groups, metric, chLabel)
         boxViolinPlot(data, 'Parent', ax, 'GroupLabels', conds, ...
             'YLabel', ylab, 'Title', sprintf('group %d', g));
         yline(ax, 0, 'k:', 'HandleVisibility','off');   % baseline reference
+        try, ax.XAxis.TickLabelRotation = 30; catch, end   % keep condition labels legible
     end
     whiten_figure(fig);   % uniform style: white bg, black text, font 20
 end

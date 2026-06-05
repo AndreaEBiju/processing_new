@@ -11,7 +11,7 @@ function fig = bulk_plot_fano_box(normRows, groups, chLabel)
 
     nG = numel(groups); nc = min(4,nG); nr = ceil(nG/nc);
     fig = figure('Color','w','Name',sprintf('Fano slope norm box — %s', chLabel), ...
-        'Position',[120 120 380*nc 320*nr]);
+        'Position',[80 80 480*nc 400*nr]);
     tl = tiledlayout(fig, nr, nc, 'Padding','compact','TileSpacing','compact');
     title(tl, sprintf('Fano slope  |  %s  |  baseline-normalized', chLabel), 'Interpreter','none');
 
@@ -25,6 +25,7 @@ function fig = bulk_plot_fano_box(normRows, groups, chLabel)
         boxScatterPlot(data, 'Parent', ax, 'GroupLabels', conds, ...
             'YLabel', 'Fano slope  (rec-base)/base', 'Title', sprintf('group %d', g));
         yline(ax, 0, 'k:', 'HandleVisibility','off');
+        try, ax.XAxis.TickLabelRotation = 30; catch, end   % keep condition labels legible
     end
     whiten_figure(fig);   % uniform style: white bg, black text, font 20
 end

@@ -23,7 +23,7 @@ function fig = bulk_plot_windowed(rawRows, groups, metric, chLabel)
 
     nG = numel(groups); nc = min(4,nG); nr = ceil(nG/nc);
     fig = figure('Color','w','Name',sprintf('%s windowed — %s', metric, chLabel), ...
-        'Position',[80 80 430*nc 340*nr]);
+        'Position',[60 60 560*nc 430*nr]);
     tl = tiledlayout(fig, nr, nc, 'Padding','compact','TileSpacing','compact');
     title(tl, sprintf('%s  |  %s  |  recovery windows, baseline-normalized', upper(metric), chLabel), ...
         'Interpreter','none');
@@ -40,6 +40,15 @@ function fig = bulk_plot_windowed(rawRows, groups, metric, chLabel)
         boxViolinPlot(data, 'Parent', ax, 'GroupLabels', conds, ...
             'SubgroupLabels', wlab, 'YLabel', ylab, 'Title', sprintf('group %d', g));
         yline(ax, 0, 'k:', 'HandleVisibility','off');
+        try, ax.XAxis.TickLabelRotation = 30; catch, end   % keep condition labels legible
+    end
+    % keep ONE shared legend, placed outside the grid (declutters the panels)
+    lgs = findall(fig,'Type','legend');
+    for q = 2:numel(lgs); delete(lgs(q)); end
+    if ~isempty(lgs)
+        try, lgs(1).Layout.Tile = 'east'; catch
+            try, lgs(1).Location = 'northeastoutside'; catch, end
+        end
     end
     whiten_figure(fig);   % uniform style: white bg, black text, font 20
 end

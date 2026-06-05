@@ -123,15 +123,21 @@ function out = run_pipeline_bulk(P, opts)
             for m = 1:numel(opts.metricsSyn)
                 bulk_plot_synergy(normRows, opts.metricsSyn{m}, chL);
             end
-            for m = 1:numel(opts.metricsBox)
-                bulk_plot_me_heatmap(rawRows, opts.metricsBox{m}, chL);   % mean %-change M x E heatmap
-            end
         end
         bulk_plot_windowed_total(rawRows, groups);   % combined (LVN+RVN) rate, windowed
         if ~isempty(opts.saveFigsDir)
             if ~exist(opts.saveFigsDir,'dir'); mkdir(opts.saveFigsDir); end
             save_all_figures(opts.saveFigsDir, 'bulk', {'png','svg','fig'});
             fprintf('[bulk] saved combined figures to %s\n', opts.saveFigsDir);
+        end
+        % all M x E mean-%-change heatmaps: nerve (rate/Vpp/FWHM/CV2 x RVN/LVN),
+        % total (LVN+RVN) rate, and HR / breathing / HRV / RMSSD / pNN5 /
+        % sample entropy / SD1 / SD2. These self-save via save_one_figure, so run
+        % AFTER save_all_figures to avoid double-saving the same figures.
+        try
+            bulk_all_heatmaps(out, opts.saveFigsDir, {'png','svg','fig'});
+        catch ME
+            warning('bulk:heatmaps','heatmap generation failed (%s)', ME.message);
         end
     else
         fprintf('[bulk] groups not set. Render later, e.g.:\n');
