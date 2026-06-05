@@ -112,6 +112,21 @@ function out = run_pipeline_bulk(P, opts)
     out = struct('raw', rawRows, 'norm', normRows, 'conv', conv, 'groups', {groups});
     try; save(fullfile(fileparts(cf),'BULK.mat'), 'out'); catch; end
 
+    % Root style fix: establish the LIGHT publication theme + base font 20 for
+    % every figure below (white axes, black text/ticks, white legend) -- the
+    % same groot defaults your other plots use. Without this, bulk figures
+    % inherit whatever theme (often dark) is left in groot from a prior call,
+    % which is what made panels black, text grey and legends black. EnableLaTeX
+    % off so condition labels like 'M10E10' and '(rec-base)/base' render plainly.
+    if exist('pubfig_setup','file')==2
+        try
+            pubfig_setup('Theme','light','BaseFontSize',20, ...
+                         'LineWidth',2.0,'MarkerSize',10,'EnableLaTeX',false);
+        catch ME
+            warning('bulk:pubfig','pubfig_setup failed (%s)', ME.message);
+        end
+    end
+
     if ~isempty(groups)
         for ci2 = 1:2
             chL = loadOpts.labels{ci2};
