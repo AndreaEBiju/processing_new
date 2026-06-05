@@ -42,6 +42,7 @@ function fig = me_heatmap_render(Z, mL, eL, titleStr, cbLabel)
 
     colormap(ax, cmap); caxis(ax, [-mx mx]);
     cb = colorbar(ax); cb.Label.String = cbLabel; cb.Label.Interpreter = 'none';
+    whiten_figure(fig);   % uniform style: white bg, black text, font 20 (incl. colorbar)
 end
 
 % ----------------------------------------------------------------------

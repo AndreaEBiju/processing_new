@@ -54,6 +54,7 @@ function fig = bulk_plot_synergy(normRows, metric, chLabel)
             end
         end
     end
+    whiten_figure(fig);   % uniform style: white bg, black text, font 20
 end
 
 % ======================================================================

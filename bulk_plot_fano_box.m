@@ -26,6 +26,7 @@ function fig = bulk_plot_fano_box(normRows, groups, chLabel)
             'YLabel', 'Fano slope  (rec-base)/base', 'Title', sprintf('group %d', g));
         yline(ax, 0, 'k:', 'HandleVisibility','off');
     end
+    whiten_figure(fig);   % uniform style: white bg, black text, font 20
 end
 
 % ======================================================================

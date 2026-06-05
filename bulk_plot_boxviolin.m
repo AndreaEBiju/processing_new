@@ -32,6 +32,7 @@ function fig = bulk_plot_boxviolin(normRows, groups, metric, chLabel)
             'YLabel', ylab, 'Title', sprintf('group %d', g));
         yline(ax, 0, 'k:', 'HandleVisibility','off');   % baseline reference
     end
+    whiten_figure(fig);   % uniform style: white bg, black text, font 20
 end
 
 % ======================================================================

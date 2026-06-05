@@ -41,6 +41,7 @@ function fig = bulk_plot_windowed(rawRows, groups, metric, chLabel)
             'SubgroupLabels', wlab, 'YLabel', ylab, 'Title', sprintf('group %d', g));
         yline(ax, 0, 'k:', 'HandleVisibility','off');
     end
+    whiten_figure(fig);   % uniform style: white bg, black text, font 20
 end
 
 % ======================================================================

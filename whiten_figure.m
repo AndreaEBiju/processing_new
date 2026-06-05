@@ -32,13 +32,20 @@ function restoreFn = whiten_figure(fig)
         a.Title.FontSize = FS; a.XLabel.FontSize = FS; a.YLabel.FontSize = FS;
     end
 
-    % ---- every text object (incl. manual heatmap labels): font size only ----
+    % ---- every text object (incl. manual labels): font 20, and black unless
+    %      it is deliberately white (white-on-saturated heatmap cell numbers) ----
     txts = findall(fig,'Type','text');
-    txtState = cell(numel(txts),1);
+    txtState = cell(numel(txts),2);
     for i = 1:numel(txts)
         t = txts(i);
-        txtState{i} = get(t,'FontSize');
-        try, set(t,'FontSize',FS); catch, end %#ok<CTCH>
+        txtState{i,1} = get(t,'FontSize');
+        txtState{i,2} = get(t,'Color');
+        try
+            set(t,'FontSize',FS);
+            if ~all(txtState{i,2} >= 0.95)      % keep near-white text white
+                set(t,'Color','k');
+            end
+        catch, end %#ok<CTCH>
     end
 
     % ---- colorbars: ruler + label color, font size ----
@@ -67,7 +74,7 @@ function restoreFn = whiten_figure(fig)
         end
         for ii = 1:numel(txts)
             t = txts(ii); if ~isgraphics(t), continue; end
-            try, set(t,'FontSize',txtState{ii}); catch, end %#ok<CTCH>
+            try, set(t,'FontSize',txtState{ii,1},'Color',txtState{ii,2}); catch, end %#ok<CTCH>
         end
         for ii = 1:numel(cbs)
             c = cbs(ii); if ~isgraphics(c), continue; end; s = cbState{ii};
