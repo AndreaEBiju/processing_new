@@ -1,58 +1,56 @@
 function normRows = bulk_compile(rawRows)
-% BULK_COMPILE  Pair baseline/recovery per (animal, condition, channel) and
-% baseline-normalize, per the agreed rule: every recovery sample x becomes
-% (x - mean_baseline)/mean_baseline. Produces one normalized row per
-% (animal, condition, channel) holding:
-%   .dist.(rate|vpp|fwhm|cv2)   normalized recovery DISTRIBUTIONS (per-sample)
-%   .scalar.(rate|excess|vpp|fwhm|cv2|fano)  normalized scalar effects
+% BULK_COMPILE  Baseline-normalize each recovery TRIAL and emit ONE normalized
+% row per (recovery file, channel). Repeat trials of the same (animal,
+% condition) are kept SEPARATE -- they are independent observations and are NOT
+% pooled/averaged together.
 %
-% Baseline mean for each metric = that metric's mean in the matched baseline
-% file; for fano it is the baseline Fano slope.
+% Each recovery is paired to ITS OWN baseline by shared file stem (the per-trial
+% id that bulk_scan_files computes by stripping the phase suffix; a trial's
+% baseline and recovery share it). Falls back to (animal,condition,channel) when
+% no stem is available (e.g. an older cache), which is exact in the nominal
+% one-trial-per-cell case.
+%
+% Each output row holds, per the agreed rule (recovery x -> (x-mean_base)/mean_base):
+%   .dist.(rate|vpp|fwhm|cv2)   normalized recovery DISTRIBUTION (per-sample)
+%   .scalar.(rate|excess|vpp|fwhm|cv2|fano)  normalized scalar effects
+% Baseline reference for each metric = that metric's mean in the matched
+% baseline file; for fano it is the baseline Fano slope.
 
-    normRows = struct('animal',{},'condition',{},'label',{}, ...
-        'dist',{},'scalar',{});
+    normRows = struct('animal',{},'condition',{},'label',{},'dist',{},'scalar',{});
     if isempty(rawRows); return; end
+    hasStem = isfield(rawRows,'stem');
 
-    keyRec = find(strcmpi({rawRows.phase},'recovery'));
-    seen = {};
-    for r = keyRec
+    recI = find(strcmpi({rawRows.phase},'recovery'));
+    for r = recI(:)'
         R = rawRows(r);
-        key = sprintf('%s|%s|%s', R.animal, R.condition, R.label);
-        if any(strcmp(seen,key)); continue; end
-        seen{end+1} = key; %#ok<AGROW>
 
-        recIdx  = find(match(rawRows, R.animal, R.condition, R.label, 'recovery'));
-        baseIdx = find(match(rawRows, R.animal, R.condition, R.label, 'baseline'));
-        if isempty(baseIdx); continue; end
-        B = rawRows(baseIdx(1));
+        % this trial's own baseline: same stem (trial) + same channel
+        bsel = [];
+        if hasStem && ~isempty(R.stem)
+            bsel = find(strcmpi({rawRows.phase},'baseline') ...
+                      & strcmp({rawRows.stem}, R.stem) ...
+                      & strcmpi({rawRows.label}, R.label));
+        end
+        if isempty(bsel)   % fallback: pair by (animal,condition,channel)
+            bsel = find(match(rawRows, R.animal, R.condition, R.label, 'baseline'));
+        end
+        if isempty(bsel); continue; end
+        B = rawRows(bsel(1));
 
         nd = struct(); ns = struct();
         for m = {'rate','vpp','fwhm','cv2'}
-            mm = m{1};
-            mu = B.mean.(mm);
-            % pool recovery distributions across any repeat trials, normalize
-            d = [];
-            for ri = recIdx(:)'
-                d = [d; rawRows(ri).dist.(mm)(:)]; %#ok<AGROW>
-            end
-            nd.(mm) = norm_vec(d, mu);
-            % normalized scalar = (mean recovery - mu)/mu (pool trial means)
-            rm = mean(arrayfun(@(ri) rawRows(ri).mean.(mm), recIdx), 'omitnan');
-            ns.(mm) = norm_scalar(rm, mu);
+            mm = m{1}; mu = B.mean.(mm);
+            nd.(mm) = norm_vec(R.dist.(mm)(:), mu);    % this trial's recovery samples
+            ns.(mm) = norm_scalar(R.mean.(mm), mu);    % this trial's scalar effect
         end
-        % excess (scalar only)
-        muE = B.mean.excess;
-        rmE = mean(arrayfun(@(ri) rawRows(ri).mean.excess, recIdx), 'omitnan');
-        ns.excess = norm_scalar(rmE, muE);
-        % fano slope (scalar only)
-        muF = B.fanoSlope;
-        rmF = mean(arrayfun(@(ri) rawRows(ri).fanoSlope, recIdx), 'omitnan');
-        ns.fano = norm_scalar(rmF, muF);
+        ns.excess = norm_scalar(R.mean.excess, B.mean.excess);
+        ns.fano   = norm_scalar(R.fanoSlope,   B.fanoSlope);
 
         normRows(end+1) = struct('animal',R.animal,'condition',R.condition, ...
             'label',R.label,'dist',nd,'scalar',ns); %#ok<AGROW>
     end
-    fprintf('[compile] %d normalized (animal x condition x channel) rows.\n', numel(normRows));
+    fprintf('[compile] %d normalized rows (one per recovery trial x channel; repeats kept separate).\n', ...
+        numel(normRows));
 end
 
 % ----------------------------------------------------------------------

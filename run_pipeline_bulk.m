@@ -94,8 +94,11 @@ function out = run_pipeline_bulk(P, opts)
         ci = find_cache(harvest, files(f).neural);
         if isempty(ci); continue; end
         rws = harvest(ci).rows;
+        if isfield(files(f),'stem') && ~isempty(files(f).stem); st = files(f).stem;
+        else; [~,st] = fileparts(files(f).neural); end   % per-trial stem (from scanner) for baseline pairing
         for k = 1:numel(rws)
             if ~isfield(rws(k).dist,'rate_t'); continue; end   % skip rows from a pre-timing cache
+            rws(k).stem = st;
             rawRows(end+1) = rws(k); %#ok<AGROW>
         end
     end
@@ -210,7 +213,7 @@ function r = empty_row()
     r = struct('animal','','condition','','phase','','label','', ...
         'dist',struct('rate',[],'rate_t',[],'vpp',[],'fwhm',[],'spk_t',[],'cv2',[],'cv2_t',[]), ...
         'mean',struct('rate',NaN,'excess',NaN,'vpp',NaN,'fwhm',NaN,'cv2',NaN), ...
-        'fanoSlope',NaN);
+        'fanoSlope',NaN, 'stem','');
 end
 
 function r = harvest_channel(D, Rf, k, animal, condition, phase)
