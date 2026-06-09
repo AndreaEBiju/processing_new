@@ -1,4 +1,4 @@
-function fig = me_heatmap_render(Z, mL, eL, titleStr, cbLabel)
+function fig = me_heatmap_render(Z, mL, eL, titleStr, cbLabel, sigMask)
 % ME_HEATMAP_RENDER  M x E mean-%-change heatmap drawn as separated tiles, with
 % the marginals OUTSIDE the interior 3x3 grid (matching the mockup):
 %   * interior 3x3 (M rows x E cols)
@@ -7,12 +7,16 @@ function fig = me_heatmap_render(Z, mL, eL, titleStr, cbLabel)
 %
 %   Z : (nM+1) x (nE+1).  Z(1,1)=corner (NaN); Z(1,2:end)=E-alone;
 %       Z(2:end,1)=M-alone; Z(2:end,2:end)=combined. NaN cells are blanked.
+%   sigMask (optional): logical, same shape as Z. Significant cells get a bold
+%       black border and a trailing '*' on the value.
 
     mL = mL(:)'; eL = eL(:)';
     nM = numel(mL); nE = numel(eL);
+    if nargin < 6 || isempty(sigMask); sigMask = false(size(Z)); end
     Ealone = Z(1, 2:end);       % 1 x nE
     Malone = Z(2:end, 1);       % nM x 1
     Comb   = Z(2:end, 2:end);   % nM x nE
+    SgE = sigMask(1, 2:end);  SgM = sigMask(2:end, 1);  SgC = sigMask(2:end, 2:end);
 
     fig = figure('Color','w','Name',titleStr,'Position',[200 200 780 660]);
     ax  = axes(fig); hold(ax,'on'); axis(ax,'equal'); axis(ax,'off');
@@ -24,12 +28,12 @@ function fig = me_heatmap_render(Z, mL, eL, titleStr, cbLabel)
 
     % interior: E columns at x = 1..nE, M rows at y = 1..nM
     for i = 1:nM
-        for j = 1:nE; draw_cell(ax, j, i, Comb(i,j), mx, cmap); end
+        for j = 1:nE; draw_cell(ax, j, i, Comb(i,j), mx, cmap, SgC(i,j)); end
     end
     % M-alone column at x = -1 (gap at x = 0 = the M row-label column)
-    for i = 1:nM; draw_cell(ax, -1, i, Malone(i), mx, cmap); end
+    for i = 1:nM; draw_cell(ax, -1, i, Malone(i), mx, cmap, SgM(i)); end
     % E-alone row at y = -1 (gap at y = 0 = the E column-label row)
-    for j = 1:nE; draw_cell(ax, j, -1, Ealone(j), mx, cmap); end
+    for j = 1:nE; draw_cell(ax, j, -1, Ealone(j), mx, cmap, SgE(j)); end
 
     % axis labels live in the gap row/column (y=0 for E, x=0 for M)
     for j = 1:nE; text(ax, j, 0, sprintf('E%d',eL(j)), 'HorizontalAlignment','center','FontSize',20,'Color',[0 0 0]); end
@@ -46,7 +50,8 @@ function fig = me_heatmap_render(Z, mL, eL, titleStr, cbLabel)
 end
 
 % ----------------------------------------------------------------------
-function draw_cell(ax, xc, yc, v, mx, cmap)
+function draw_cell(ax, xc, yc, v, mx, cmap, isSig)
+    if nargin < 7 || isempty(isSig); isSig = false; end
     w = 0.46;
     if isnan(v)
         col = [0.92 0.92 0.92];
@@ -54,10 +59,12 @@ function draw_cell(ax, xc, yc, v, mx, cmap)
         t = (v + mx)/(2*mx); t = min(max(t,0),1);
         col = cmap(max(1, round(t*(size(cmap,1)-1))+1), :);
     end
-    patch(ax, xc+[-w -w w w], yc+[-w w w -w], col, 'EdgeColor',[1 1 1], 'LineWidth',1);
+    if isSig && ~isnan(v); ec = [0 0 0]; lw = 3; else; ec = [1 1 1]; lw = 1; end
+    patch(ax, xc+[-w -w w w], yc+[-w w w -w], col, 'EdgeColor',ec, 'LineWidth',lw);
     if ~isnan(v)
         tc = [0 0 0]; if abs(v)/mx > 0.55; tc = [1 1 1]; end
-        text(ax, xc, yc, sprintf('%+.0f%%', v), 'HorizontalAlignment','center', 'Color',tc, 'FontSize',20);
+        str = sprintf('%+.0f%%', v); if isSig; str = [str '*']; end
+        text(ax, xc, yc, str, 'HorizontalAlignment','center', 'Color',tc, 'FontSize',20);
     end
 end
 

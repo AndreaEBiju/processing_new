@@ -37,6 +37,7 @@ function R = bulk_mixed_models(out, saveDir)
 % bulk_hrv_heatmaps); if absent they are skipped with a warning.
 
     if nargin < 2; saveDir = ''; end
+    formats = {'png','svg','fig'};
     assert(license('test','Statistics_Toolbox') || exist('fitlme','file')==2, ...
         'bulk_mixed_models: needs the Statistics & Machine Learning Toolbox (fitlme).');
 
@@ -50,8 +51,9 @@ function R = bulk_mixed_models(out, saveDir)
     for k = 1:numel(nMet)
         for ci = 1:numel(nChan)   % RVN and LVN are distinct nerves -> separate models
             T = build_nerve_table(out.norm, nMet{k}, nChan{ci});
-            [s, c] = fit_metric(T, sprintf('%s (%s)', nLab{k}, nChan{ci}), 'nerve');
+            [s, c, hm] = fit_metric(T, sprintf('%s (%s)', nLab{k}, nChan{ci}), 'nerve');
             summ{end+1} = s; cellRows = [cellRows; c]; %#ok<AGROW>
+            maybe_plot(hm, s.metric, saveDir, formats);
         end
     end
 
@@ -61,8 +63,9 @@ function R = bulk_mixed_models(out, saveDir)
         try
             Tsys = build_systemic_tables();   % struct array .label, .T
             for k = 1:numel(Tsys)
-                [s, c] = fit_metric(Tsys(k).T, Tsys(k).label, 'systemic');
+                [s, c, hm] = fit_metric(Tsys(k).T, Tsys(k).label, 'systemic');
                 summ{end+1} = s; cellRows = [cellRows; c]; %#ok<AGROW>
+                maybe_plot(hm, s.metric, saveDir, formats);
             end
         catch ME
             warning('bulk_mixed_models:sys','systemic metrics skipped (%s)', ME.message);
@@ -106,8 +109,8 @@ function R = bulk_mixed_models(out, saveDir)
 end
 
 % ======================================================================
-function [s, cells] = fit_metric(T, label, source)
-    cells = {};
+function [s, cells, hm] = fit_metric(T, label, source)
+    cells = {}; hm = [];
     s = struct('metric',label,'source',source,'method','-','nObs',height(T), ...
         'nAnimals',numel(unique(T.animal)),'statName','-','stat',NaN,'df',NaN,'pInteraction',NaN);
     if height(T) < 6 || numel(unique(T.animal)) < 3
@@ -167,6 +170,50 @@ function [s, cells] = fit_metric(T, label, source)
         cells{end+1,1} = struct('metric',label,'source',source,'M',M,'E',E, ...
             'synergy',Est(idx(q)),'SE',SE(idx(q)),'p',pvals(q),'pFDR',pFDR(q)); %#ok<AGROW>
     end
+
+    % ---- heatmap data: synergy interior (FDR) + main-effect margins (in %) ----
+    mLevAll = [10 50 100]; eLevAll = [10 100 1000];
+    has = @(nm) any(strcmp(CoefName, nm));
+    mLev = mLevAll(arrayfun(@(L) has(sprintf('m%d',L)), mLevAll));
+    eLev = eLevAll(arrayfun(@(L) has(sprintf('e%d',L)), eLevAll));
+    nMl = numel(mLev); nEl = numel(eLev);
+    Z = nan(nMl+1, nEl+1); Sg = false(nMl+1, nEl+1);
+    for j = 1:nEl; [e,p] = getco(CoefName,Est,PV,sprintf('e%d',eLev(j))); Z(1,1+j)=100*e; Sg(1,1+j)=p<0.05; end
+    for i = 1:nMl; [e,p] = getco(CoefName,Est,PV,sprintf('m%d',mLev(i))); Z(1+i,1)=100*e; Sg(1+i,1)=p<0.05; end
+    synP = nan(nMl,nEl);
+    for i = 1:nMl
+        for j = 1:nEl
+            [e,p] = getco(CoefName,Est,PV,sprintf('m%d:e%d',mLev(i),eLev(j)));
+            Z(1+i,1+j) = 100*e; synP(i,j) = p;
+        end
+    end
+    fin = isfinite(synP); q = nan(size(synP)); if any(fin(:)); q(fin) = bh_fdr(synP(fin)); end
+    Sg(2:end,2:end) = isfinite(q) & q < 0.05;
+    hm = struct('Mlev',mLev,'Elev',eLev,'Z',Z,'sig',Sg);
+end
+
+% ======================================================================
+function maybe_plot(hm, label, saveDir, formats)
+% Render (and save) the M x E synergy heatmap for one metric: interior = the
+% interaction coefficients (synergy, %), margins = main effects, '*' + bold
+% border on significant cells.
+    if isempty(hm); return; end
+    interior = hm.Z(2:end, 2:end);
+    if ~any(isfinite(interior(:))); return; end
+    ttl = sprintf('%s : M x E synergy', label);
+    cbl = 'main effect (margins) / synergy (interior), %   (* significant)';
+    f = me_heatmap_render(hm.Z, hm.Mlev, hm.Elev, ttl, cbl, hm.sig);
+    if ~isempty(saveDir) && exist('save_one_figure','file')==2
+        save_one_figure(f, saveDir, ['mixedmodel_' regexprep(label,'[^\w]+','_')], formats);
+    end
+end
+
+function [e, p] = getco(names, Est, PV, nm)
+    idx = find(strcmp(names, nm), 1);
+    if isempty(idx) && contains(nm, ':')   % try swapped interaction order
+        pp = strsplit(nm, ':'); idx = find(strcmp(names, [pp{2} ':' pp{1}]), 1);
+    end
+    if isempty(idx); e = NaN; p = NaN; else; e = Est(idx); p = PV(idx); end
 end
 
 % ======================================================================
