@@ -146,6 +146,7 @@ function [s, cells, hm] = fit_metric(T, label, source)
             cmp = compare(lmeRed, lmeFull);   % theoretical LRT
             s.method='LME'; s.statName='chi2'; s.stat=cmp.LRStat(2);
             s.df=cmp.deltaDF(2); s.pInteraction=cmp.pValue(2);
+            mdl = lmeFull;
             CoefName = lmeFull.CoefficientNames; Est = lmeFull.Coefficients.Estimate;
             SE = lmeFull.Coefficients.SE; PV = lmeFull.Coefficients.pValue;
         else
@@ -155,6 +156,7 @@ function [s, cells, hm] = fit_metric(T, label, source)
             for q=1:numel(ii); L(q, ii(q)) = 1; end
             [p,F,df1,~] = coefTest(lmFull, L);
             s.method='LM'; s.statName='F'; s.stat=F; s.df=df1; s.pInteraction=p;
+            mdl = lmFull;
             CoefName = lmFull.CoefficientNames; Est = lmFull.Coefficients.Estimate;
             SE = lmFull.Coefficients.SE; PV = lmFull.Coefficients.pValue;
         end
@@ -171,49 +173,74 @@ function [s, cells, hm] = fit_metric(T, label, source)
             'synergy',Est(idx(q)),'SE',SE(idx(q)),'p',pvals(q),'pFDR',pFDR(q)); %#ok<AGROW>
     end
 
-    % ---- heatmap data: synergy interior (FDR) + main-effect margins (in %) ----
+    % ---- heatmap data: EVERY cell = that condition's relative change from
+    %      baseline (%), with p vs baseline (0). Each cell's modeled mean is a
+    %      contrast of the fitted coefficients:
+    %        M alone (k)      = alpha_k
+    %        E alone (l)      = beta_l
+    %        combined (k,l)   = alpha_k + beta_l + gamma_kl
+    %      p comes from coefTest on that contrast; FDR across all cells.
     mLevAll = [10 50 100]; eLevAll = [10 100 1000];
     has = @(nm) any(strcmp(CoefName, nm));
     mLev = mLevAll(arrayfun(@(L) has(sprintf('m%d',L)), mLevAll));
     eLev = eLevAll(arrayfun(@(L) has(sprintf('e%d',L)), eLevAll));
     nMl = numel(mLev); nEl = numel(eLev);
-    Z = nan(nMl+1, nEl+1); Sg = false(nMl+1, nEl+1);
-    for j = 1:nEl; [e,p] = getco(CoefName,Est,PV,sprintf('e%d',eLev(j))); Z(1,1+j)=100*e; Sg(1,1+j)=p<0.05; end
-    for i = 1:nMl; [e,p] = getco(CoefName,Est,PV,sprintf('m%d',mLev(i))); Z(1+i,1)=100*e; Sg(1+i,1)=p<0.05; end
-    synP = nan(nMl,nEl);
+    Z = nan(nMl+1, nEl+1); P = nan(nMl+1, nEl+1);
+    for j = 1:nEl
+        [e,p] = contrast_sum(mdl, CoefName, Est, {sprintf('e%d',eLev(j))});
+        Z(1,1+j) = 100*e; P(1,1+j) = p;
+    end
+    for i = 1:nMl
+        [e,p] = contrast_sum(mdl, CoefName, Est, {sprintf('m%d',mLev(i))});
+        Z(1+i,1) = 100*e; P(1+i,1) = p;
+    end
     for i = 1:nMl
         for j = 1:nEl
-            [e,p] = getco(CoefName,Est,PV,sprintf('m%d:e%d',mLev(i),eLev(j)));
-            Z(1+i,1+j) = 100*e; synP(i,j) = p;
+            [e,p] = contrast_sum(mdl, CoefName, Est, ...
+                {sprintf('m%d',mLev(i)), sprintf('e%d',eLev(j)), sprintf('m%d:e%d',mLev(i),eLev(j))});
+            Z(1+i,1+j) = 100*e; P(1+i,1+j) = p;
         end
     end
-    fin = isfinite(synP); q = nan(size(synP)); if any(fin(:)); q(fin) = bh_fdr(synP(fin)); end
-    Sg(2:end,2:end) = isfinite(q) & q < 0.05;
+    fin = isfinite(P); q = nan(size(P)); if any(fin(:)); q(fin) = bh_fdr(P(fin)); end
+    Sg = isfinite(q) & q < 0.05;
     hm = struct('Mlev',mLev,'Elev',eLev,'Z',Z,'sig',Sg);
 end
 
 % ======================================================================
+function [est, p] = contrast_sum(mdl, CoefName, Est, names)
+% Estimate and p-value for the linear contrast that SUMS the named coefficients
+% (tests sum == 0). Used to read each condition's fitted mean change from the
+% fitted M/E/interaction coefficients. Works for fitlme and fitlm.
+    L = zeros(1, numel(CoefName)); est = 0;
+    for n = names
+        idx = findcoef(CoefName, n{1});
+        if isempty(idx); est = NaN; p = NaN; return; end
+        L(idx) = 1; est = est + Est(idx);
+    end
+    try, p = coefTest(mdl, L); catch, p = NaN; end %#ok<CTCH>
+end
+
+function idx = findcoef(CoefName, n)
+    idx = find(strcmp(CoefName, n), 1);
+    if isempty(idx) && contains(n, ':')   % interaction stored in the other order
+        pp = strsplit(n, ':'); idx = find(strcmp(CoefName, [pp{2} ':' pp{1}]), 1);
+    end
+end
+
+% ======================================================================
 function maybe_plot(hm, label, saveDir, formats)
-% Render (and save) the M x E synergy heatmap for one metric: interior = the
-% interaction coefficients (synergy, %), margins = main effects, '*' + bold
-% border on significant cells.
+% Render (and save) the heatmap for one metric: EVERY cell is that condition's
+% relative change from baseline (%); '*' + bold border = change significantly
+% different from baseline (FDR<0.05 across the cells).
     if isempty(hm); return; end
     interior = hm.Z(2:end, 2:end);
     if ~any(isfinite(interior(:))); return; end
-    ttl = sprintf('%s : M x E synergy', label);
-    cbl = 'main effect (margins) / synergy (interior), %   (* significant)';
+    ttl = sprintf('%s : relative change from baseline (%%)', label);
+    cbl = 'relative change from baseline (%)   (* FDR<0.05 vs baseline)';
     f = me_heatmap_render(hm.Z, hm.Mlev, hm.Elev, ttl, cbl, hm.sig);
     if ~isempty(saveDir) && exist('save_one_figure','file')==2
         save_one_figure(f, saveDir, ['mixedmodel_' regexprep(label,'[^\w]+','_')], formats);
     end
-end
-
-function [e, p] = getco(names, Est, PV, nm)
-    idx = find(strcmp(names, nm), 1);
-    if isempty(idx) && contains(nm, ':')   % try swapped interaction order
-        pp = strsplit(nm, ':'); idx = find(strcmp(names, [pp{2} ':' pp{1}]), 1);
-    end
-    if isempty(idx); e = NaN; p = NaN; else; e = Est(idx); p = PV(idx); end
 end
 
 % ======================================================================
