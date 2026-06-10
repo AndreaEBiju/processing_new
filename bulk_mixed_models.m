@@ -63,6 +63,12 @@ function R = bulk_mixed_models(out, saveDir, logMetrics)
         end
     end
 
+    % ---------------- total firing rate (LVN + RVN summed) -----------------
+    Tt = build_total_rate_table(out.raw);
+    [s, c, hm] = fit_metric(Tt, 'Total firing rate (LVN+RVN)', 'nerve', false);
+    summ{end+1} = s; cellRows = [cellRows; c]; %#ok<AGROW>
+    maybe_plot(hm, s.metric, saveDir, formats, false);
+
     % ---------------- systemic metrics (HR / HRV loaders) ------------------
     haveLoaders = exist('buildFileQueue','file')==2 && exist('loadAllSeriesCached','file')==2;
     if haveLoaders
@@ -289,6 +295,44 @@ function T = build_nerve_table(normRows, metric, channel)
         v = normRows(i).scalar.(metric); if ~isfinite(v); continue; end
         [M,E] = parse_me(normRows(i).condition);
         y(end+1,1)=v; an{end+1,1}=normRows(i).animal; Mv(end+1,1)=M; Ev(end+1,1)=E; %#ok<AGROW>
+    end
+    T = make_table(y, an, Mv, Ev);
+end
+
+% ======================================================================
+function T = build_total_rate_table(rows)
+% Total firing rate (LVN+RVN): sum the per-channel mean rate within each
+% recording (rows grouped by file stem + phase), then normalize each recovery to
+% its (animal,condition)-matched baseline: y = (rec_total - base_total)/base_total.
+    n = numel(rows);
+    if isfield(rows,'stem') && ~all(cellfun(@isempty,{rows.stem}))
+        rk = arrayfun(@(r) sprintf('%s|%s', char(rows(r).stem), rows(r).phase), 1:n, 'uni', 0);
+    else
+        rk = arrayfun(@(r) sprintf('%s|%s|%s', rows(r).animal, rows(r).condition, rows(r).phase), 1:n, 'uni', 0);
+    end
+    uk = unique(rk, 'stable');
+    rec = struct('phase',{},'animal',{},'condition',{},'total',{});
+    for k = 1:numel(uk)
+        idx = find(strcmp(rk, uk{k})); tot = 0; cnt = 0;
+        for ii = idx
+            if isfield(rows(ii),'mean') && isfield(rows(ii).mean,'rate') && isfinite(rows(ii).mean.rate)
+                tot = tot + rows(ii).mean.rate; cnt = cnt + 1;
+            end
+        end
+        if cnt == 0; continue; end
+        rec(end+1) = struct('phase',rows(idx(1)).phase,'animal',rows(idx(1)).animal, ...
+            'condition',rows(idx(1)).condition,'total',tot); %#ok<AGROW>
+    end
+    bi = find(strcmpi({rec.phase},'baseline'));
+    y=[]; an={}; Mv=[]; Ev=[];
+    for r = find(strcmpi({rec.phase},'recovery'))
+        a = rec(r).animal; c = rec(r).condition;
+        cand = bi(strcmpi({rec(bi).animal},a) & strcmpi({rec(bi).condition},c));
+        if isempty(cand); continue; end
+        bt = rec(cand(1)).total; rt = rec(r).total;
+        if ~isfinite(bt) || bt == 0; continue; end
+        [M,E] = parse_me(c);
+        y(end+1,1)=(rt-bt)/bt; an{end+1,1}=a; Mv(end+1,1)=M; Ev(end+1,1)=E; %#ok<AGROW>
     end
     T = make_table(y, an, Mv, Ev);
 end
