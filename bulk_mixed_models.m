@@ -1,4 +1,4 @@
-function R = bulk_mixed_models(out, saveDir)
+function R = bulk_mixed_models(out, saveDir, logMetrics)
 % BULK_MIXED_MODELS  Mixed-effects test of the Mechanical x Electrical interaction
 % (synergy) for every metric, with animal as a random factor.
 %
@@ -37,6 +37,12 @@ function R = bulk_mixed_models(out, saveDir)
 % bulk_hrv_heatmaps); if absent they are skipped with a warning.
 
     if nargin < 2; saveDir = ''; end
+    % metrics that also get a LOG-scale (geometric) heatmap, robust to the
+    % ratio blow-ups of skewed, strictly-positive HRV measures. All metrics get
+    % the normal-scale heatmap; only these get an extra log version.
+    if nargin < 3 || isempty(logMetrics)
+        logMetrics = {'HRV','RMSSD','pNN5','SD1','SD2'};
+    end
     formats = {'png','svg','fig'};
     assert(license('test','Statistics_Toolbox') || exist('fitlme','file')==2, ...
         'bulk_mixed_models: needs the Statistics & Machine Learning Toolbox (fitlme).');
@@ -51,9 +57,9 @@ function R = bulk_mixed_models(out, saveDir)
     for k = 1:numel(nMet)
         for ci = 1:numel(nChan)   % RVN and LVN are distinct nerves -> separate models
             T = build_nerve_table(out.norm, nMet{k}, nChan{ci});
-            [s, c, hm] = fit_metric(T, sprintf('%s (%s)', nLab{k}, nChan{ci}), 'nerve');
+            [s, c, hm] = fit_metric(T, sprintf('%s (%s)', nLab{k}, nChan{ci}), 'nerve', false);
             summ{end+1} = s; cellRows = [cellRows; c]; %#ok<AGROW>
-            maybe_plot(hm, s.metric, saveDir, formats);
+            maybe_plot(hm, s.metric, saveDir, formats, false);
         end
     end
 
@@ -63,9 +69,16 @@ function R = bulk_mixed_models(out, saveDir)
         try
             Tsys = build_systemic_tables();   % struct array .label, .T
             for k = 1:numel(Tsys)
-                [s, c, hm] = fit_metric(Tsys(k).T, Tsys(k).label, 'systemic');
+                % normal-scale (every metric)
+                [s, c, hm] = fit_metric(Tsys(k).T, Tsys(k).label, 'systemic', false);
                 summ{end+1} = s; cellRows = [cellRows; c]; %#ok<AGROW>
-                maybe_plot(hm, s.metric, saveDir, formats);
+                maybe_plot(hm, s.metric, saveDir, formats, false);
+                % extra log-scale heatmap for the noisy ratio metrics
+                if any(strcmpi(Tsys(k).label, logMetrics))
+                    [s2, c2, hm2] = fit_metric(Tsys(k).T, [Tsys(k).label ' (log)'], 'systemic', true);
+                    summ{end+1} = s2; cellRows = [cellRows; c2]; %#ok<AGROW>
+                    maybe_plot(hm2, s2.metric, saveDir, formats, true);
+                end
             end
         catch ME
             warning('bulk_mixed_models:sys','systemic metrics skipped (%s)', ME.message);
@@ -109,8 +122,17 @@ function R = bulk_mixed_models(out, saveDir)
 end
 
 % ======================================================================
-function [s, cells, hm] = fit_metric(T, label, source)
+function [s, cells, hm] = fit_metric(T, label, source, useLog)
+    if nargin < 4; useLog = false; end
     cells = {}; hm = [];
+    % log-scale option: model log fold-change instead of arithmetic % change.
+    % y is (rec-base)/base, so 1+y = rec/base and log(1+y) = log fold-change.
+    % This is robust to small-baseline ratio blow-ups in skewed positive metrics.
+    if useLog
+        keep = isfinite(T.y) & (1 + T.y) > 0;   % need rec/base > 0
+        T = T(keep, :);
+        T.y = log(1 + T.y);
+    end
     s = struct('metric',label,'source',source,'method','-','nObs',height(T), ...
         'nAnimals',numel(unique(T.animal)),'statName','-','stat',NaN,'df',NaN,'pInteraction',NaN);
     if height(T) < 6 || numel(unique(T.animal)) < 3
@@ -185,20 +207,23 @@ function [s, cells, hm] = fit_metric(T, label, source)
     mLev = mLevAll(arrayfun(@(L) has(sprintf('m%d',L)), mLevAll));
     eLev = eLevAll(arrayfun(@(L) has(sprintf('e%d',L)), eLevAll));
     nMl = numel(mLev); nEl = numel(eLev);
+    % on the log model the contrast is a log fold-change -> back-transform to %
+    % change via 100*(exp(.)-1); on the normal model it is already a fraction.
+    toPct = @(e) 100 * ( useLog*(exp(e)-1) + (~useLog)*e );
     Z = nan(nMl+1, nEl+1); P = nan(nMl+1, nEl+1);
     for j = 1:nEl
         [e,p] = contrast_sum(mdl, CoefName, Est, {sprintf('e%d',eLev(j))});
-        Z(1,1+j) = 100*e; P(1,1+j) = p;
+        Z(1,1+j) = toPct(e); P(1,1+j) = p;
     end
     for i = 1:nMl
         [e,p] = contrast_sum(mdl, CoefName, Est, {sprintf('m%d',mLev(i))});
-        Z(1+i,1) = 100*e; P(1+i,1) = p;
+        Z(1+i,1) = toPct(e); P(1+i,1) = p;
     end
     for i = 1:nMl
         for j = 1:nEl
             [e,p] = contrast_sum(mdl, CoefName, Est, ...
                 {sprintf('m%d',mLev(i)), sprintf('e%d',eLev(j)), sprintf('m%d:e%d',mLev(i),eLev(j))});
-            Z(1+i,1+j) = 100*e; P(1+i,1+j) = p;
+            Z(1+i,1+j) = toPct(e); P(1+i,1+j) = p;
         end
     end
     fin = isfinite(P); q = nan(size(P)); if any(fin(:)); q(fin) = bh_fdr(P(fin)); end
@@ -228,15 +253,22 @@ function idx = findcoef(CoefName, n)
 end
 
 % ======================================================================
-function maybe_plot(hm, label, saveDir, formats)
+function maybe_plot(hm, label, saveDir, formats, useLog)
 % Render (and save) the heatmap for one metric: EVERY cell is that condition's
 % relative change from baseline (%); '*' + bold border = change significantly
-% different from baseline (FDR<0.05 across the cells).
+% different from baseline (FDR<0.05 across the cells). useLog only changes the
+% title/colorbar wording (the values are already back-transformed to %).
+    if nargin < 5; useLog = false; end
     if isempty(hm); return; end
     interior = hm.Z(2:end, 2:end);
     if ~any(isfinite(interior(:))); return; end
-    ttl = sprintf('%s : relative change from baseline (%%)', label);
-    cbl = 'relative change from baseline (%)   (* FDR<0.05 vs baseline)';
+    if useLog
+        ttl = sprintf('%s : relative change from baseline (%%)', label);   % label already has "(log)"
+        cbl = 'relative change from baseline (%, geometric / log-scale)   (* FDR<0.05 vs baseline)';
+    else
+        ttl = sprintf('%s : relative change from baseline (%%)', label);
+        cbl = 'relative change from baseline (%)   (* FDR<0.05 vs baseline)';
+    end
     f = me_heatmap_render(hm.Z, hm.Mlev, hm.Elev, ttl, cbl, hm.sig);
     if ~isempty(saveDir) && exist('save_one_figure','file')==2
         save_one_figure(f, saveDir, ['mixedmodel_' regexprep(label,'[^\w]+','_')], formats);
