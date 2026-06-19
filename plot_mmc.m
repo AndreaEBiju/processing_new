@@ -13,6 +13,11 @@ function plot_mmc(mmcFile, opts)
 %   .zoom   length (s) of the Fig-1C zoom inside .win         [3]
 
     if nargin < 2; opts = struct(); end
+    if nargin < 1 || isempty(mmcFile) || exist(mmcFile,'file')~=2
+        [fn,fp] = uigetfile({'*_mmc.mat','MMC cache (*_mmc.mat)'}, 'Select an _mmc.mat file');
+        if isequal(fn,0); return; end
+        mmcFile = fullfile(fp,fn);
+    end
     S = load(mmcFile); assert(isfield(S,'mmc'), 'plot_mmc: %s has no mmc struct.', mmcFile);
     m = S.mmc; ch = getf(opts,'chan',1); zoomLen = getf(opts,'zoom',3);
     fs = m.fs; t = m.t(:); N = numel(t); sig = double(m.signal);
@@ -33,8 +38,8 @@ function plot_mmc(mmcFile, opts)
     raw = [];
     if isfield(m,'qc') && isfield(m.qc,'srcFile') && exist(m.qc.srcFile,'file')==2
         try
-            g = load(m.qc.srcFile, m.qc.gastricVar); R = double(g.(m.qc.gastricVar));
-            if size(R,1) < size(R,2); R = R.'; end; raw = R(:,1:3);
+            g = load(m.qc.srcFile, m.qc.dataVar); R = double(g.(m.qc.dataVar));
+            if size(R,1) < size(R,2); R = R.'; end; raw = R(:, m.qc.gastricCols);
         catch; raw = []; end
     end
     rT = []; if isfield(m,'qc') && isfield(m.qc,'rpeakT'); rT = m.qc.rpeakT(:); end

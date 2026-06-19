@@ -9,9 +9,11 @@ function mmc = extract_mmc(blankFile, hrbrFile, opts)
 %   mmc = extract_mmc(blankFile, hrbrFile, opts)
 %
 % REQUIRED opts:
-%   .gastricVar   name of the N x 3 array in blankFile
+%   .gastricCols  3 column indices of the stomach channels within the combined
+%                 (nerve+stomach) array in blankFile, e.g. [5 6 7]
 %   .ecgVar       name of the ECG trace in hrbrFile
 % OPTIONAL opts (defaults in brackets):
+%   .dataVar      name of the combined array in blankFile [auto: largest 2-D numeric]
 %   .fsVar        fs variable name in blankFile         [auto: fs/Fs/sampleRate/samplerate]
 %   .ecgFsVar     fs variable name in hrbrFile           [auto, else = gastric fs]
 %   .band         bandpass band, Hz                      [2 50]
@@ -26,7 +28,7 @@ function mmc = extract_mmc(blankFile, hrbrFile, opts)
 %   .rpeakTimes   (override) supplied R-peak times (s); skips ECG detection []
 
     if nargin < 3; opts = struct(); end
-    req = {'gastricVar','ecgVar'};
+    req = {'gastricCols','ecgVar'};
     for r = req; assert(isfield(opts,r{1}) && ~isempty(opts.(r{1})), ...
             'extract_mmc: opts.%s is required.', r{1}); end
     g = @(f,d) getdef(opts,f,d);
@@ -37,12 +39,17 @@ function mmc = extract_mmc(blankFile, hrbrFile, opts)
     dW = g('delayW',30); dS = g('delayStep',5); dMax = g('delayMaxLag',3);
     doSave = g('save',true);
 
-    % ---- load gastric N x 3 + fs ----
-    Sg = load(blankFile, opts.gastricVar);
-    G = Sg.(opts.gastricVar); G = double(G);
-    if size(G,1) < size(G,2); G = G.'; end           % force N x 3
-    assert(size(G,2)>=3, 'extract_mmc: %s is not >=3 channels.', opts.gastricVar);
-    G = G(:,1:3);
+    % ---- load combined (nerve+stomach) array, select the 3 stomach columns ----
+    cols = opts.gastricCols(:).';
+    assert(numel(cols)==3, 'extract_mmc: opts.gastricCols must list 3 stomach channel indices.');
+    dataVar = getdef(opts,'dataVar','');
+    if isempty(dataVar); dataVar = biggest_matrix_var(blankFile); end
+    Sg = load(blankFile, dataVar);
+    D = double(Sg.(dataVar));
+    if size(D,1) < size(D,2); D = D.'; end           % N x nChannels (time down columns)
+    assert(max(cols) <= size(D,2), 'extract_mmc: gastricCols [%s] exceed #channels (%d) in %s.', ...
+        num2str(cols), size(D,2), dataVar);
+    G = D(:, cols);
     fs = read_fs(blankFile, getdef(opts,'fsVar',''));
     N = size(G,1); t = (0:N-1).'/fs;
 
@@ -113,7 +120,7 @@ function mmc = extract_mmc(blankFile, hrbrFile, opts)
 
     % ---- QC products (kept small; make plot_mmc self-contained) ----
     qc = struct();
-    qc.srcFile = blankFile; qc.gastricVar = opts.gastricVar;
+    qc.srcFile = blankFile; qc.dataVar = dataVar; qc.gastricCols = cols;
     qc.rpeakT = rIdx/fs;
     if numel(rIdx) > 2; qc.meanHR = 60/median(diff(rIdx)/fs); else; qc.meanHR = NaN; end
     qc.pctBlanked  = mean(isnan(cond),1)*100;          % 1x3, % time cardiac-blanked
@@ -148,7 +155,7 @@ function mmc = extract_mmc(blankFile, hrbrFile, opts)
     mmc.params = struct('band',band,'W',W,'S',S,'k',k,'sigmaWin',sigmaWin, ...
         'refractory',refr,'cardiacBlankMs',cardMs,'minValidFrac',minVF, ...
         'delayW',dW,'delayStep',dS,'delayMaxLag',dMax, ...
-        'gastricVar',opts.gastricVar,'ecgVar',opts.ecgVar,'nRpeaks',numel(rIdx));
+        'dataVar',dataVar,'gastricCols',cols,'ecgVar',opts.ecgVar,'nRpeaks',numel(rIdx));
     mmc.qc = qc;
 
     if doSave
@@ -160,6 +167,20 @@ end
 
 % ======================================================================
 function v = getdef(s,f,d); if isfield(s,f)&&~isempty(s.(f)); v=s.(f); else; v=d; end; end
+
+function name = biggest_matrix_var(file)
+% Pick the largest 2-D numeric variable in the .mat file (the data matrix).
+    w = whos('-file', file); best = ''; bestN = 0;
+    for i = 1:numel(w)
+        if numel(w(i).size)==2 && min(w(i).size)>=1 && ...
+           any(strcmp(w(i).class,{'double','single','int16','int32','uint16'}))
+            n = prod(w(i).size);
+            if n > bestN; bestN = n; best = w(i).name; end
+        end
+    end
+    assert(~isempty(best), 'biggest_matrix_var: no numeric matrix found in %s; set opts.dataVar.', file);
+    name = best;
+end
 
 function fs = read_fs(file, name, fallback)
     if nargin<3; fallback=[]; end

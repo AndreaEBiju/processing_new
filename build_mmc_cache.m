@@ -5,9 +5,11 @@ function build_mmc_cache(opts)
 %
 %   build_mmc_cache(opts)
 %
-% REQUIRED opts (the variable names are study-specific):
-%   .gastricVar   name of the N x 3 gastric array in the _blankmotion file
+% REQUIRED opts (study-specific):
+%   .gastricCols  3 column indices of the stomach channels within the combined
+%                 (nerve+stomach) array in the _blankmotion file, e.g. [5 6 7]
 %   .ecgVar       name of the ECG trace in the _HRBR file
+% OPTIONAL: .dataVar (combined-array name; auto-detected if omitted)
 % OPTIONAL opts: any field accepted by extract_mmc (band, W, S, k, sigmaWin,
 %   refractory, cardiacBlankMs, storeFs, delayW/delayStep/delayMaxLag, fsVar,
 %   ecgFsVar, ...). Reasonable defaults are used otherwise.
@@ -17,8 +19,8 @@ function build_mmc_cache(opts)
 % already carrying a _mmc.mat are reprocessed (delete to force a clean rebuild).
 
     if nargin < 1; opts = struct(); end
-    assert(isfield(opts,'gastricVar') && ~isempty(opts.gastricVar), ...
-        'build_mmc_cache: set opts.gastricVar (the N x 3 gastric variable name).');
+    assert(isfield(opts,'gastricCols') && ~isempty(opts.gastricCols), ...
+        'build_mmc_cache: set opts.gastricCols (3 stomach channel indices, e.g. [5 6 7]).');
     assert(isfield(opts,'ecgVar') && ~isempty(opts.ecgVar), ...
         'build_mmc_cache: set opts.ecgVar (the ECG variable name in the _HRBR file).');
     for fn = {'bulk_conventions_ui','bulk_queue_ui','extract_mmc'}
