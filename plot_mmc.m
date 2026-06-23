@@ -8,9 +8,11 @@ function plot_mmc(mmcFile, opts)
 %   plot_mmc(mmcFile, opts)
 %
 % opts:
-%   .chan   channel for the time-domain / detection panels   [1]
-%   .win    [t0 t1] seconds for the windowed panels          [auto: busiest 40 s]
-%   .zoom   length (s) of the Fig-1C zoom inside .win         [3]
+%   .chan    channel for the time-domain / detection panels  [1]
+%   .win     [t0 t1] seconds for the windowed panels          [auto: busiest 40 s]
+%   .zoom    length (s) of the Fig-1C zoom inside .win         [3]
+%   .saveDir folder to save the 3 figures into                [none = display only]
+%   .formats subset of {'png','svg','fig'}                     [{'png','fig'}]
 
     if nargin < 2; opts = struct(); end
     if nargin < 1 || isempty(mmcFile) || exist(mmcFile,'file')~=2
@@ -46,7 +48,7 @@ function plot_mmc(mmcFile, opts)
     rTw = rT(rT>=w(1) & rT<=w(2));
 
     % ================= FIGURE 1 — conditioning & cardiac QC =================
-    figure('Name',['MMC | conditioning & cardiac QC | ' nm],'Color','w','Position',[60 60 1180 760]);
+    f1 = figure('Name',['MMC | conditioning & cardiac QC | ' nm],'Color','w','Position',[60 60 1180 760]);
     tiledlayout(3,2,'Padding','compact','TileSpacing','compact');
 
     nexttile;                                            % 1A raw + R-peaks
@@ -97,7 +99,7 @@ function plot_mmc(mmcFile, opts)
     else; axis off; title('1E. PSD (n/a)'); end
 
     % ================= FIGURE 2 — burst detection ==========================
-    figure('Name',['MMC | detection | ' nm],'Color','w','Position',[90 90 1180 720]);
+    f2 = figure('Name',['MMC | detection | ' nm],'Color','w','Position',[90 90 1180 720]);
     tiledlayout(2,2,'Padding','compact','TileSpacing','compact');
 
     nexttile;                                            % 2A signal + adaptive threshold + peaks
@@ -127,7 +129,7 @@ function plot_mmc(mmcFile, opts)
     title('2D. QC summary');
 
     % ================= FIGURE 3 — metric time series =======================
-    figure('Name',['MMC | metric time series | ' nm],'Color','w','Position',[120 60 1180 820]);
+    f3 = figure('Name',['MMC | metric time series | ' nm],'Color','w','Position',[120 60 1180 820]);
     tl = tiledlayout(5,1,'Padding','compact','TileSpacing','compact');
     ax = gobjects(5,1);
 
@@ -157,10 +159,28 @@ function plot_mmc(mmcFile, opts)
     ylim([0.5 3.5]); set(gca,'YTick',1:3,'YTickLabel',{'ch1','ch2','ch3'});
     xlabel('s'); title('3E. Burst event raster');
     linkaxes(ax,'x'); xlim(ax(1),[0 t(end)]);
+
+    % ---- optional save (keeps the diagnostic's own fonts; no font-20 restyle) ----
+    saveDir = getf(opts,'saveDir','');
+    if ~isempty(saveDir)
+        fmts = getf(opts,'formats',{'png','fig'});
+        save_figs([f1 f2 f3], {[nm '_QC_conditioning'],[nm '_QC_detection'],[nm '_metrics']}, saveDir, fmts);
+        fprintf('  [plot_mmc] saved 3 figures to %s\n', saveDir);
+    end
 end
 
 % ======================================================================
 function v = getf(s,f,d); if isfield(s,f)&&~isempty(s.(f)); v=s.(f); else; v=d; end; end
+
+function save_figs(figs, names, saveDir, fmts)
+    if ~exist(saveDir,'dir'); mkdir(saveDir); end
+    for i = 1:numel(figs)
+        b = fullfile(saveDir, regexprep(names{i},'[^\w\-.]+','_'));
+        if any(strcmpi(fmts,'png')); try, exportgraphics(figs(i),[b '.png'],'Resolution',150,'BackgroundColor','white'); catch, end; end %#ok<CTCH>
+        if any(strcmpi(fmts,'svg')); try, exportgraphics(figs(i),[b '.svg'],'ContentType','vector','BackgroundColor','white'); catch, end; end %#ok<CTCH>
+        if any(strcmpi(fmts,'fig')); try, savefig(figs(i),[b '.fig']); catch, end; end %#ok<CTCH>
+    end
+end
 
 function shade_nan(tt, yy)
     bad = isnan(yy); if ~any(bad); return; end
