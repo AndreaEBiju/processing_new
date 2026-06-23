@@ -52,7 +52,12 @@ function plot_mmc(mmcFile, opts)
     nexttile;                                            % 1A raw + R-peaks
     if ~isempty(raw)
         plot(t(iw), raw(iw,ch),'Color',[.3 .3 .3]); hold on;
-        yl = ylim; for k=1:numel(rTw); plot([rTw(k) rTw(k)],yl,'r-','Color',[1 .3 .3 .5]); end
+        yl = ylim;
+        if ~isempty(rTw)                              % all R-peak lines as ONE object
+            xx = [rTw(:)'; rTw(:)'; nan(1,numel(rTw))];
+            yy = repmat([yl(1); yl(2); NaN], 1, numel(rTw));
+            plot(xx(:), yy(:), '-', 'Color', [1 .3 .3 .6]);
+        end
         title(sprintf('1A. Raw + R-peaks (ch %d)',ch));
     else
         text(.5,.5,'raw unavailable (source file not found)','HorizontalAlignment','center'); axis off;

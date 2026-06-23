@@ -69,7 +69,7 @@ function mmc = extract_mmc(blankFile, hrbrFile, opts)
         rf = getdef(opts,'rpeakFile', hrbrFile);
         Sp = load(rf, opts.rpeakVar); pk = double(Sp.(opts.rpeakVar)(:));
         if startsWith(lower(getdef(opts,'rpeakUnits','seconds')), 'sample')
-            pfs = getdef(opts,'rpeakFs', read_fs(rf, getdef(opts,'ecgFsVar',''), fs));
+            pfs = getdef(opts,'rpeakFs', fs);       % default: indices are into the main (gastric) recording
             rT = pk / pfs;                          % sample indices -> seconds
         else
             rT = pk;                                % already in seconds
@@ -85,7 +85,8 @@ function mmc = extract_mmc(blankFile, hrbrFile, opts)
     % ---- per-channel processing ----
     cond = nan(N,3);                                  % conditioned signal (full rate)
     evIdx = cell(1,3);                                % burst-peak sample indices
-    [bb,aa] = butter(4, [band(1) min(band(2),0.45*fs)]/(fs/2), 'bandpass');
+    [zf,pf,kf] = butter(4, [band(1) min(band(2),0.45*fs)]/(fs/2), 'bandpass');
+    [sos,gd]   = zp2sos(zf,pf,kf);   % SOS form: numerically stable at very low normalized cutoffs (high fs)
     for ch = 1:3
         x = G(:,ch);
         % cardiac blank-before-filter: NaN around R, interp, filtfilt, restore NaN
@@ -96,7 +97,7 @@ function mmc = extract_mmc(blankFile, hrbrFile, opts)
         xb = x; xb(bl) = NaN;
         xf = fillmissing(xb,'linear','EndValues','nearest');
         xf(~isfinite(xf)) = 0;
-        y = filtfilt(bb,aa,xf);
+        y = filtfilt(sos,gd,xf);
         y(bl) = NaN;                                  % keep cardiac gaps as NaN
         cond(:,ch) = y;
         % adaptive median/sigma detection -> burst peaks
