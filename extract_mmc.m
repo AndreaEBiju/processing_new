@@ -11,10 +11,16 @@ function mmc = extract_mmc(blankFile, hrbrFile, opts)
 % REQUIRED opts:
 %   .gastricCols  3 column indices of the stomach channels within the combined
 %                 (nerve+stomach) array in blankFile, e.g. [5 6 7]
-%   .ecgVar       name of the ECG trace in hrbrFile
+%   cardiac source -- ONE of:
+%     .rpeakVar   name of a precomputed R-peak vector in hrbrFile (preferred), OR
+%     .ecgVar     name of a raw ECG trace in hrbrFile (R-peaks detected here), OR
+%     .rpeakTimes R-peak times (s) passed directly
 % OPTIONAL opts (defaults in brackets):
-%   .dataVar      name of the combined array in blankFile [auto: largest 2-D numeric]
-%   .fsVar        fs variable name in blankFile         [auto: fs/Fs/sampleRate/samplerate]
+%   .rpeakUnits   'seconds' | 'samples' for .rpeakVar     [seconds]
+%   .rpeakFs      fs for 'samples' R-peaks                 [HRBR fs / gastric fs]
+%   .rpeakFile    file holding .rpeakVar                   [hrbrFile]
+%   .dataVar      name of the combined array in blankFile  [auto: largest 2-D numeric]
+%   .fsVar        fs variable name in blankFile            [auto: fs/Fs/sampleRate/samplerate]
 %   .ecgFsVar     fs variable name in hrbrFile           [auto, else = gastric fs]
 %   .band         bandpass band, Hz                      [2 50]
 %   .W .S         rate window / step, s                  [10  1]
@@ -28,9 +34,12 @@ function mmc = extract_mmc(blankFile, hrbrFile, opts)
 %   .rpeakTimes   (override) supplied R-peak times (s); skips ECG detection []
 
     if nargin < 3; opts = struct(); end
-    req = {'gastricCols','ecgVar'};
-    for r = req; assert(isfield(opts,r{1}) && ~isempty(opts.(r{1})), ...
-            'extract_mmc: opts.%s is required.', r{1}); end
+    assert(isfield(opts,'gastricCols') && ~isempty(opts.gastricCols), ...
+        'extract_mmc: opts.gastricCols is required.');
+    assert((isfield(opts,'rpeakVar')  && ~isempty(opts.rpeakVar))  || ...
+           (isfield(opts,'ecgVar')    && ~isempty(opts.ecgVar))    || ...
+           (isfield(opts,'rpeakTimes')&& ~isempty(opts.rpeakTimes)), ...
+        'extract_mmc: give a cardiac source: opts.rpeakVar OR opts.ecgVar OR opts.rpeakTimes.');
     g = @(f,d) getdef(opts,f,d);
     band   = g('band',[2 50]);   W = g('W',10);  S = g('S',1);
     k      = g('k',4);           sigmaWin = g('sigmaWin',1);
@@ -53,12 +62,21 @@ function mmc = extract_mmc(blankFile, hrbrFile, opts)
     fs = read_fs(blankFile, getdef(opts,'fsVar',''));
     N = size(G,1); t = (0:N-1).'/fs;
 
-    % ---- R-peak times from HRBR ECG (or supplied) ----
+    % ---- R-peak times: precomputed locations preferred; else detect from ECG ----
     if isfield(opts,'rpeakTimes') && ~isempty(opts.rpeakTimes)
         rT = opts.rpeakTimes(:);
+    elseif isfield(opts,'rpeakVar') && ~isempty(opts.rpeakVar)
+        rf = getdef(opts,'rpeakFile', hrbrFile);
+        Sp = load(rf, opts.rpeakVar); pk = double(Sp.(opts.rpeakVar)(:));
+        if startsWith(lower(getdef(opts,'rpeakUnits','seconds')), 'sample')
+            pfs = getdef(opts,'rpeakFs', read_fs(rf, getdef(opts,'ecgFsVar',''), fs));
+            rT = pk / pfs;                          % sample indices -> seconds
+        else
+            rT = pk;                                % already in seconds
+        end
     else
         Se = load(hrbrFile, opts.ecgVar); ecg = double(Se.(opts.ecgVar)(:));
-        fsE = read_fs(hrbrFile, getdef(opts,'ecgFsVar',''), fs);   % fall back to gastric fs
+        fsE = read_fs(hrbrFile, getdef(opts,'ecgFsVar',''), fs);
         rT = detect_rpeaks(ecg, fsE);
     end
     rIdx = unique(min(max(round(rT*fs),1),N));        % R-peaks in gastric samples
@@ -155,7 +173,8 @@ function mmc = extract_mmc(blankFile, hrbrFile, opts)
     mmc.params = struct('band',band,'W',W,'S',S,'k',k,'sigmaWin',sigmaWin, ...
         'refractory',refr,'cardiacBlankMs',cardMs,'minValidFrac',minVF, ...
         'delayW',dW,'delayStep',dS,'delayMaxLag',dMax, ...
-        'dataVar',dataVar,'gastricCols',cols,'ecgVar',opts.ecgVar,'nRpeaks',numel(rIdx));
+        'dataVar',dataVar,'gastricCols',cols, ...
+        'ecgVar',getdef(opts,'ecgVar',''),'rpeakVar',getdef(opts,'rpeakVar',''),'nRpeaks',numel(rIdx));
     mmc.qc = qc;
 
     if doSave
