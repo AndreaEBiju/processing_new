@@ -48,7 +48,7 @@ function plot_mmc(mmcFile, opts)
     rTw = rT(rT>=w(1) & rT<=w(2));
 
     % ================= FIGURE 1 — conditioning & cardiac QC =================
-    f1 = figure('Name',['MMC | conditioning & cardiac QC | ' nm],'Color','w','Position',[60 60 1180 760]);
+    f1 = figure('Name',['MMC | conditioning & cardiac QC | ' nm],'Color','w','Position',[40 50 1720 980]);
     tiledlayout(3,2,'Padding','compact','TileSpacing','compact');
 
     nexttile;                                            % 1A raw + R-peaks
@@ -99,7 +99,7 @@ function plot_mmc(mmcFile, opts)
     else; axis off; title('1E. PSD (n/a)'); end
 
     % ================= FIGURE 2 — burst detection ==========================
-    f2 = figure('Name',['MMC | detection | ' nm],'Color','w','Position',[90 90 1180 720]);
+    f2 = figure('Name',['MMC | detection | ' nm],'Color','w','Position',[60 50 1720 960]);
     tiledlayout(2,2,'Padding','compact','TileSpacing','compact');
 
     nexttile;                                            % 2A signal + adaptive threshold + peaks
@@ -129,7 +129,7 @@ function plot_mmc(mmcFile, opts)
     title('2D. QC summary');
 
     % ================= FIGURE 3 — metric time series =======================
-    f3 = figure('Name',['MMC | metric time series | ' nm],'Color','w','Position',[120 60 1180 820]);
+    f3 = figure('Name',['MMC | metric time series | ' nm],'Color','w','Position',[80 30 1720 1030]);
     tl = tiledlayout(5,1,'Padding','compact','TileSpacing','compact');
     ax = gobjects(5,1);
 
@@ -160,7 +160,12 @@ function plot_mmc(mmcFile, opts)
     xlabel('s'); title('3E. Burst event raster');
     linkaxes(ax,'x'); xlim(ax(1),[0 t(end)]);
 
-    % ---- optional save (keeps the diagnostic's own fonts; no font-20 restyle) ----
+    % ---- match the pipeline style: white bg, black text, font 20 ----
+    for ff = [f1 f2 f3]
+        if exist('whiten_figure','file')==2; whiten_figure(ff); else; style_bw(ff); end
+    end
+
+    % ---- optional save ----
     saveDir = getf(opts,'saveDir','');
     if ~isempty(saveDir)
         fmts = getf(opts,'formats',{'png','fig'});
@@ -171,6 +176,30 @@ end
 
 % ======================================================================
 function v = getf(s,f,d); if isfield(s,f)&&~isempty(s.(f)); v=s.(f); else; v=d; end; end
+
+function style_bw(fig)
+% Fallback if whiten_figure is not on the path: white bg, black text, font 20.
+    FS = 20;
+    set(fig,'Color','w','InvertHardcopy','off');
+    for a = findall(fig,'Type','axes')'
+        set(a,'Color','w','XColor','k','YColor','k','ZColor','k','GridColor',[.15 .15 .15], ...
+            'FontSize',FS,'LabelFontSizeMultiplier',1,'TitleFontSizeMultiplier',1);
+        try, a.Title.Color='k'; a.XLabel.Color='k'; a.YLabel.Color='k';
+             a.Title.FontSize=FS; a.XLabel.FontSize=FS; a.YLabel.FontSize=FS; catch, end %#ok<CTCH>
+    end
+    for tlh = findall(fig,'Type','tiledlayout')'
+        try, tlh.Title.Color='k'; tlh.Title.FontSize=FS; catch, end %#ok<CTCH>
+    end
+    for lg = findall(fig,'Type','legend')'
+        try, set(lg,'Color','w','TextColor','k','EdgeColor',[.15 .15 .15],'FontSize',FS); catch, end %#ok<CTCH>
+    end
+    for cb = findall(fig,'Type','colorbar')'
+        try, set(cb,'Color','k','FontSize',FS); cb.Label.Color='k'; cb.Label.FontSize=FS; catch, end %#ok<CTCH>
+    end
+    for tx = findall(fig,'Type','text')'
+        try, set(tx,'FontSize',FS); c=get(tx,'Color'); if ~all(c>=0.95); set(tx,'Color','k'); end; catch, end %#ok<CTCH>
+    end
+end
 
 function save_figs(figs, names, saveDir, fmts)
     if ~exist(saveDir,'dir'); mkdir(saveDir); end
