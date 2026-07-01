@@ -43,7 +43,9 @@ function mmc = extract_mmc(blankFile, hrbrFile, opts)
     g = @(f,d) getdef(opts,f,d);
     band   = g('band',[2 50]);   W = g('W',10);  S = g('S',1);
     k      = g('k',3);           sigmaWin = g('sigmaWin',30);   % LONG (>> burst duration)
-    refr   = g('refractory',0.5);cardMs = g('cardiacBlankMs',25);
+    spikeRefr = g('spikeRefractory', 0.05);                 % individual muscle firings
+    burstRefr = g('burstRefractory', g('refractory', 0.5)); % grouped burst episodes
+    cardMs = g('cardiacBlankMs',25);
     minVF  = g('minValidFrac',0.5);
     dW = g('delayW',30); dS = g('delayStep',5); dMax = g('delayMaxLag',3);
     doSave = g('save',true);
@@ -84,7 +86,7 @@ function mmc = extract_mmc(blankFile, hrbrFile, opts)
 
     % ---- per-channel processing ----
     cond = nan(N,3);                                  % conditioned signal (full rate)
-    evIdx = cell(1,3);                                % burst-peak sample indices
+    spkIdx = cell(1,3); brsIdx = cell(1,3);           % event peaks: firings / grouped bursts
     [zf,pf,kf] = butter(4, [band(1) min(band(2),0.45*fs)]/(fs/2), 'bandpass');
     [sos,gd]   = zp2sos(zf,pf,kf);   % SOS form: numerically stable at very low normalized cutoffs (high fs)
     for ch = 1:3
@@ -100,42 +102,17 @@ function mmc = extract_mmc(blankFile, hrbrFile, opts)
         y = filtfilt(sos,gd,xf);
         y(bl) = NaN;                                  % keep cardiac gaps as NaN
         cond(:,ch) = y;
-        % adaptive median/sigma detection -> burst peaks
-        evIdx{ch} = detect_bursts(y, fs, k, sigmaWin, refr);
+        spkIdx{ch} = detect_bursts(y, fs, k, sigmaWin, spikeRefr);  % individual firings
+        brsIdx{ch} = detect_bursts(y, fs, k, sigmaWin, burstRefr);  % grouped episodes
     end
 
-    % ---- sliding-window burst rate + per-window peak amplitude ----
+    % ---- sliding-window rate + per-window peak amplitude, for BOTH levels ----
     centers = (W/2 : S : (t(end)-W/2)).';
-    M = numel(centers);
-    rate = nan(M,3); peakAmp = nan(M,3);
-    for ch = 1:3
-        valid = ~isnan(cond(:,ch));
-        cumv = [0; cumsum(double(valid))];
-        pk = evIdx{ch}; pkt = pk/fs; pka = abs(cond(pk,ch));
-        for w = 1:M
-            lo = max(1, floor((centers(w)-W/2)*fs)+1);
-            hi = min(N, floor((centers(w)+W/2)*fs));
-            validDur = (cumv(hi+1)-cumv(lo))/fs;
-            if validDur < minVF*W; continue; end
-            inw = pkt>=centers(w)-W/2 & pkt<centers(w)+W/2;
-            rate(w,ch) = sum(inw)/validDur;
-            if any(inw); peakAmp(w,ch) = mean(pka(inw)); end
-        end
-    end
-    avgMMCRate = zeros(1,3);
-    for ch = 1:3
-        valid = ~isnan(cond(:,ch));
-        avgMMCRate(ch) = numel(evIdx{ch}) / max(sum(valid)/fs, eps);
-    end
+    [fRate,fAmp,fAvg] = event_rate(cond, spkIdx, fs, N, centers, W, minVF); % individual firings
+    [bRate,bAmp,bAvg] = event_rate(cond, brsIdx, fs, N, centers, W, minVF); % grouped bursts
 
-    % ---- inter-channel propagation delay (pairs 1-2,1-3,2-3) on the rate series
-    [delay, delay_t] = xchan_delay(rate, S, dW, dS, dMax);
-
-    % ---- store conditioned signal + event boolean at FULL fs ----
-    evS = false(N,3);
-    for ch = 1:3
-        evS(evIdx{ch},ch) = true;
-    end
+    % ---- inter-channel propagation delay on the (denser) firing-rate series ----
+    [delay, delay_t] = xchan_delay(fRate, S, dW, dS, dMax);
 
     % ---- QC products (kept small; make plot_mmc self-contained) ----
     qc = struct();
@@ -143,8 +120,9 @@ function mmc = extract_mmc(blankFile, hrbrFile, opts)
     qc.rpeakT = rIdx/fs;
     if numel(rIdx) > 2; qc.meanHR = 60/median(diff(rIdx)/fs); else; qc.meanHR = NaN; end
     qc.pctBlanked  = mean(isnan(cond),1)*100;          % 1x3, % time cardiac-blanked
-    qc.rateNanFrac = mean(isnan(rate),1)*100;          % 1x3, % NaN rate windows
-    qc.nBursts     = cellfun(@numel, evIdx);           % 1x3
+    qc.rateNanFrac = mean(isnan(bRate),1)*100;         % 1x3, % NaN rate windows
+    qc.nFirings    = cellfun(@numel, spkIdx);          % 1x3, individual firings
+    qc.nBursts     = cellfun(@numel, brsIdx);          % 1x3, grouped bursts
     Lh = round(0.1*fs); seg = (-Lh:Lh).'; qc.periR_t = seg/fs;     % peri-R average +/-100ms
     pr = zeros(numel(seg),3); pc = zeros(numel(seg),3); cnt = 0;
     for ri = rIdx(:)'
@@ -166,14 +144,16 @@ function mmc = extract_mmc(blankFile, hrbrFile, opts)
     mmc = struct();
     mmc.fs = fs; mmc.t = t;
     mmc.signal = single(cond);    % full-rate conditioned (cardiac-blanked, bandpassed)
-    mmc.eventSeries = evS;        % full-rate logical, 1 at each burst peak
-    mmc.rate_t = centers; mmc.rate = rate; mmc.peakAmp = peakAmp;
-    mmc.avgMMCRate = avgMMCRate;
-    mmc.delay_t = delay_t; mmc.delay = delay;   % cols = pairs [1-2 1-3 2-3]
+    mmc.rate_t = centers;
+    mmc.firing = struct('events', ev_bool(spkIdx,N), 'rate',fRate,'peakAmp',fAmp, ...
+                        'avgRate',fAvg, 'refractory',spikeRefr);   % individual muscle firings
+    mmc.burst  = struct('events', ev_bool(brsIdx,N), 'rate',bRate,'peakAmp',bAmp, ...
+                        'avgRate',bAvg, 'refractory',burstRefr);   % grouped burst episodes
+    mmc.delay_t = delay_t; mmc.delay = delay;   % cols = pairs [1-2 1-3 2-3], on firing rate
     mmc.pairs = {'1-2','1-3','2-3'};
     mmc.params = struct('band',band,'W',W,'S',S,'k',k,'sigmaWin',sigmaWin, ...
-        'refractory',refr,'cardiacBlankMs',cardMs,'minValidFrac',minVF, ...
-        'delayW',dW,'delayStep',dS,'delayMaxLag',dMax, ...
+        'spikeRefractory',spikeRefr,'burstRefractory',burstRefr,'cardiacBlankMs',cardMs, ...
+        'minValidFrac',minVF,'delayW',dW,'delayStep',dS,'delayMaxLag',dMax, ...
         'dataVar',dataVar,'gastricCols',cols, ...
         'ecgVar',getdef(opts,'ecgVar',''),'rpeakVar',getdef(opts,'rpeakVar',''),'nRpeaks',numel(rIdx));
     mmc.qc = qc;
@@ -181,7 +161,8 @@ function mmc = extract_mmc(blankFile, hrbrFile, opts)
     if doSave
         [d,b] = fileparts(blankFile);
         save(fullfile(d,[b '_mmc.mat']), 'mmc');
-        fprintf('  [mmc] %s  rate(ch)= %s Hz\n', b, num2str(avgMMCRate,'%.3f '));
+        fprintf('  [mmc] %s  firings/s= %s | bursts/s= %s\n', b, ...
+            num2str(fAvg,'%.2f '), num2str(bAvg,'%.2f '));
     end
 end
 
@@ -244,8 +225,12 @@ function pk = detect_bursts(y, fs, k, sigmaWin, refr)
     above = (abs(y-med) > k*sig) & isfinite(y);
     idx = find(above);
     if isempty(idx); pk = []; return; end
-    gaps = [Inf; diff(idx)];
-    burstId = cumsum(gaps > refr*fs);
+    % gaps measured in VALID (non-blanked) time: a cardiac blank between two
+    % supra-threshold events is NOT counted as an inter-burst gap, so bursts are
+    % bridged across the blanks rather than split/terminated by them.
+    cumValid = cumsum(isfinite(y));
+    vgap = [Inf; (cumValid(idx(2:end)) - cumValid(idx(1:end-1)))/fs];
+    burstId = cumsum(vgap > refr);
     nb = burstId(end); pk = zeros(nb,1);
     for b = 1:nb
         gi = idx(burstId==b);
@@ -274,4 +259,32 @@ function [delay, delay_t] = xchan_delay(rate, S, dW, dS, dMax)
             [~,mi] = max(c); delay(s,p) = lags(mi)*S;
         end
     end
+end
+
+function [rate, peakAmp, avgRate] = event_rate(cond, evIdx, fs, N, centers, W, minVF)
+% Sliding-window event rate and mean per-window peak amplitude, per channel.
+% Rate = events / VALID duration (cardiac-blanked samples are excluded from the
+% denominator, so blanks are never mistaken for quiescence). Windows whose valid
+% fraction < minVF are left NaN. avgRate = whole-record events / valid seconds.
+    M = numel(centers); rate = nan(M,3); peakAmp = nan(M,3); avgRate = zeros(1,3);
+    for ch = 1:3
+        valid = ~isnan(cond(:,ch)); cumv = [0; cumsum(double(valid))];
+        pk = evIdx{ch}; pkt = pk/fs; pka = abs(cond(pk,ch));
+        for w = 1:M
+            lo = max(1, floor((centers(w)-W/2)*fs)+1);
+            hi = min(N, floor((centers(w)+W/2)*fs));
+            vd = (cumv(hi+1)-cumv(lo))/fs;
+            if vd < minVF*W; continue; end
+            inw = pkt>=centers(w)-W/2 & pkt<centers(w)+W/2;
+            rate(w,ch) = sum(inw)/vd;
+            if any(inw); peakAmp(w,ch) = mean(pka(inw)); end
+        end
+        avgRate(ch) = numel(evIdx{ch}) / max(sum(valid)/fs, eps);
+    end
+end
+
+function ev = ev_bool(evIdx, N)
+% Full-rate logical event series, 1 at each event peak sample. cols = channels.
+    ev = false(N,3);
+    for ch = 1:3; ev(evIdx{ch},ch) = true; end
 end

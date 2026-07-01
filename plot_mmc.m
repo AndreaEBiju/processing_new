@@ -8,11 +8,16 @@ function plot_mmc(mmcFile, opts)
 %   plot_mmc(mmcFile, opts)
 %
 % opts:
+%   .level   'firing' (individual muscle firings) | 'burst' (grouped episodes) ['firing']
 %   .chan    channel for the time-domain / detection panels  [1]
 %   .win     [t0 t1] seconds for the windowed panels          [auto: busiest 40 s]
 %   .zoom    length (s) of the Fig-1C zoom inside .win         [3]
 %   .saveDir folder to save the 3 figures into                [none = display only]
 %   .formats subset of {'png','svg','fig'}                     [{'png','fig'}]
+%
+% The cache stores BOTH levels (mmc.firing and mmc.burst); .level picks which one
+% the detection/metric panels display. The conditioning/cardiac QC (Fig 1) is
+% level-independent. Filenames get a _firing / _burst suffix so both can be saved.
 
     if nargin < 2; opts = struct(); end
     if nargin < 1 || isempty(mmcFile) || exist(mmcFile,'file')~=2
@@ -24,12 +29,15 @@ function plot_mmc(mmcFile, opts)
     m = S.mmc; ch = getf(opts,'chan',1); zoomLen = getf(opts,'zoom',3);
     fs = m.fs; t = m.t(:); N = numel(t); sig = double(m.signal);
     col = lines(3); [~,nm] = fileparts(mmcFile);
+    level = lower(getf(opts,'level','firing'));          % 'firing' | 'burst'
+    lv = get_level(m, level);                            % .events/.rate/.peakAmp/.avgRate/.refractory
+    Ltag = [upper(level(1)) level(2:end)];               % 'Firing' | 'Burst'
 
-    % busiest 40 s window (most total bursts) unless given
+    % busiest 40 s window (most total events) unless given
     if isfield(opts,'win') && ~isempty(opts.win)
         w = opts.win;
     else
-        rs = sum(m.rate,2,'omitnan'); [~,wi] = max(rs);
+        rs = sum(lv.rate,2,'omitnan'); [~,wi] = max(rs);
         c = m.rate_t(min(max(wi,1),numel(m.rate_t)));
         w = [max(0,c-20) min(t(end),c+20)];
     end
@@ -73,9 +81,9 @@ function plot_mmc(mmcFile, opts)
 
     nexttile;                                            % 1C zoom morphology + peaks
     plot(t(iz), y(iz),'Color',col(1,:)); hold on;
-    pk = find(m.eventSeries(:,ch)); pkz = pk(t(pk)>=z0 & t(pk)<=z1);
+    pk = find(lv.events(:,ch)); pkz = pk(t(pk)>=z0 & t(pk)<=z1);
     plot(t(pkz), y(pkz),'v','Color',col(2,:),'MarkerFaceColor',col(2,:),'MarkerSize',5);
-    title(sprintf('1C. Zoom: burst morphology + peaks (%.0f-%.0f s)',z0,z1)); xlabel('s'); xlim([z0 z1]);
+    title(sprintf('1C. Zoom: %s morphology + peaks (%.0f-%.0f s)',level,z0,z1)); xlabel('s'); xlim([z0 z1]);
 
     nexttile;                                            % 1D peri-R triggered average
     if isfield(m,'qc') && ~isempty(m.qc.periR_t)
@@ -111,21 +119,22 @@ function plot_mmc(mmcFile, opts)
     plot(tv, medF(iw)+m.params.k*sgF(iw), 'r-'); plot(tv, medF(iw)-m.params.k*sgF(iw), 'r-');
     pkw = pk(t(pk)>=w(1) & t(pk)<=w(2));
     plot(t(pkw),y(pkw),'v','Color',col(2,:),'MarkerFaceColor',col(2,:),'MarkerSize',5);
-    title(sprintf('2A. Conditioned + %g\\sigma threshold + burst peaks (ch %d)',m.params.k,ch));
+    title(sprintf('2A. Conditioned + %g\\sigma threshold + %s peaks (ch %d, refr %.0f ms)', ...
+        m.params.k, level, ch, lv.refractory*1e3));
     xlabel('s'); xlim(w);
 
-    nexttile;                                            % 2B inter-burst-interval hist
+    nexttile;                                            % 2B inter-event-interval hist
     pkt = t(pk); ibi = diff(pkt);
     if ~isempty(ibi); histogram(ibi, max(10,round(numel(ibi)/4))); end
-    xlabel('inter-burst interval (s)'); ylabel('count'); title(sprintf('2B. IBI (ch %d)',ch));
+    xlabel(sprintf('inter-%s interval (s)',level)); ylabel('count'); title(sprintf('2B. IEI (ch %d)',ch));
 
-    nexttile;                                            % 2C burst amplitude hist
+    nexttile;                                            % 2C event amplitude hist
     amp = abs(y(pk));
     if ~isempty(amp); histogram(amp, max(10,round(numel(amp)/4))); end
-    xlabel('burst peak |amplitude|'); ylabel('count'); title(sprintf('2C. Amplitudes (ch %d)',ch));
+    xlabel(sprintf('%s peak |amplitude|',level)); ylabel('count'); title(sprintf('2C. Amplitudes (ch %d)',ch));
 
     nexttile; axis off;                                  % 2D QC text
-    qcl = qc_lines(m);
+    qcl = qc_lines(m, level);
     text(0.02,0.98,qcl,'VerticalAlignment','top','FontName','FixedWidth','FontSize',10,'Interpreter','none');
     title('2D. QC summary');
 
@@ -135,13 +144,13 @@ function plot_mmc(mmcFile, opts)
     ax = gobjects(5,1);
 
     ax(1)=nexttile;                                      % 3A rate
-    plot(m.rate_t, m.rate); hold on;
-    for c3=1:3; yline(m.avgMMCRate(c3),'--','Color',col(c3,:)); end
-    ylabel('rate (Hz)'); title('3A. Burst firing rate per second (3 channels; dashed = avg)');
+    plot(m.rate_t, lv.rate); hold on;
+    for c3=1:3; yline(lv.avgRate(c3),'--','Color',col(c3,:)); end
+    ylabel('rate (Hz)'); title(sprintf('3A. %s rate per second (3 channels; dashed = avg)',Ltag));
     legend({'ch1','ch2','ch3'},'Location','eastoutside');
 
-    ax(2)=nexttile; plot(m.rate_t, m.peakAmp);           % 3B peak amplitude
-    ylabel('peak amp'); title('3B. Burst peak amplitude'); legend({'ch1','ch2','ch3'},'Location','eastoutside');
+    ax(2)=nexttile; plot(m.rate_t, lv.peakAmp);          % 3B peak amplitude
+    ylabel('peak amp'); title(sprintf('3B. %s peak amplitude',Ltag)); legend({'ch1','ch2','ch3'},'Location','eastoutside');
 
     ax(3)=nexttile;                                      % 3C coverage / validity
     cov = coverage(sig, m.rate_t, m.params.W, fs)*100;
@@ -154,11 +163,11 @@ function plot_mmc(mmcFile, opts)
 
     ax(5)=nexttile; hold on;                             % 3E event raster
     for c3=1:3
-        et = t(m.eventSeries(:,c3));
+        et = t(lv.events(:,c3));
         plot(et, c3*ones(size(et)),'|','Color',col(c3,:),'MarkerSize',8);
     end
     ylim([0.5 3.5]); set(gca,'YTick',1:3,'YTickLabel',{'ch1','ch2','ch3'});
-    xlabel('s'); title('3E. Burst event raster');
+    xlabel('s'); title(sprintf('3E. %s event raster',Ltag));
     linkaxes(ax,'x'); xlim(ax(1),[0 t(end)]);
 
     % ---- match the pipeline style: white bg, black text, font 20 ----
@@ -170,13 +179,30 @@ function plot_mmc(mmcFile, opts)
     saveDir = getf(opts,'saveDir','');
     if ~isempty(saveDir)
         fmts = getf(opts,'formats',{'png','fig'});
-        save_figs([f1 f2 f3], {[nm '_QC_conditioning'],[nm '_QC_detection'],[nm '_metrics']}, saveDir, fmts);
+        save_figs([f1 f2 f3], {[nm '_QC_conditioning'], ...
+            [nm '_QC_detection_' level], [nm '_metrics_' level]}, saveDir, fmts);
         fprintf('  [plot_mmc] saved 3 figures to %s\n', saveDir);
     end
 end
 
 % ======================================================================
 function v = getf(s,f,d); if isfield(s,f)&&~isempty(s.(f)); v=s.(f); else; v=d; end; end
+
+function lv = get_level(m, level)
+% Pull the requested detection level (mmc.firing / mmc.burst). Falls back to the
+% legacy single-level layout (mmc.eventSeries/rate/peakAmp/avgMMCRate) so old
+% caches still plot.
+    if isfield(m, level)
+        lv = m.(level);
+    elseif isfield(m,'eventSeries')
+        rf = 0.5; if isfield(m,'params') && isfield(m.params,'refractory'); rf = m.params.refractory; end
+        lv = struct('events',m.eventSeries,'rate',m.rate,'peakAmp',m.peakAmp, ...
+                    'avgRate',m.avgMMCRate,'refractory',rf);
+        warning('plot_mmc:legacy','legacy single-level cache; showing it as "%s". Rebuild _mmc for firing+burst.', level);
+    else
+        error('plot_mmc: cache has neither mmc.%s nor legacy fields -- rebuild the _mmc cache.', level);
+    end
+end
 
 function style_bw(fig)
 % Fallback if whiten_figure is not on the path: white bg, black text, font 20.
@@ -231,18 +257,26 @@ function cov = coverage(sig, ct, W, fs)
     end
 end
 
-function s = qc_lines(m)
+function s = qc_lines(m, level)
+    if nargin < 2; level = 'firing'; end
     q = []; if isfield(m,'qc'); q = m.qc; end
     L = {};
     if ~isempty(q)
-        L{end+1} = sprintf('R-peaks   : %d   (mean HR %.0f bpm)', numel(q.rpeakT), q.meanHR);
-        L{end+1} = sprintf('%% blanked  : %s', num2str(q.pctBlanked,'%6.1f'));
-        L{end+1} = sprintf('# bursts   : %s', num2str(q.nBursts,'%6d'));
-        L{end+1} = sprintf('avg rate Hz: %s', num2str(m.avgMMCRate,'%6.3f'));
-        L{end+1} = sprintf('%% NaN rate : %s', num2str(q.rateNanFrac,'%6.1f'));
+        L{end+1} = sprintf('level shown : %s', level);
+        L{end+1} = sprintf('R-peaks     : %d   (mean HR %.0f bpm)', numel(q.rpeakT), q.meanHR);
+        L{end+1} = sprintf('%% blanked    : %s', num2str(q.pctBlanked,'%7.1f'));
+        if isfield(q,'nFirings'); L{end+1} = sprintf('# firings    : %s', num2str(q.nFirings,'%7d')); end
+        L{end+1} = sprintf('# bursts     : %s', num2str(q.nBursts,'%7d'));
+        if isfield(m,'firing'); L{end+1} = sprintf('firings/s    : %s', num2str(m.firing.avgRate,'%7.2f')); end
+        if isfield(m,'burst');  L{end+1} = sprintf('bursts/s     : %s', num2str(m.burst.avgRate, '%7.2f')); end
+        if isfield(m,'firing') && isfield(m.firing,'refractory') && isfield(m,'burst')
+            L{end+1} = sprintf('refractory   : %.0f ms firing / %.0f ms burst', ...
+                m.firing.refractory*1e3, m.burst.refractory*1e3);
+        end
+        L{end+1} = sprintf('%% NaN rate   : %s', num2str(q.rateNanFrac,'%7.1f'));
         flags = {};
         if any(q.pctBlanked>40); flags{end+1}='>40% blanked'; end
-        if any(q.nBursts<10);    flags{end+1}='few bursts (<10)'; end
+        if isfield(q,'nBursts') && any(q.nBursts<10); flags{end+1}='few bursts (<10)'; end
         if any(q.rateNanFrac>50);flags{end+1}='>50% NaN rate windows'; end
         pk = abs(q.periR_cond); pr = abs(q.periR_raw);
         if any(max(pk)./max(pr) > 0.3); flags{end+1}='peri-R residual high (check cardiac removal)'; end
