@@ -91,16 +91,20 @@ function mmc = extract_mmc(blankFile, hrbrFile, opts)
     [sos,gd]   = zp2sos(zf,pf,kf);   % SOS form: numerically stable at very low normalized cutoffs (high fs)
     for ch = 1:3
         x = G(:,ch);
-        % cardiac blank-before-filter: NaN around R, interp, filtfilt, restore NaN
-        bl = false(N,1);
+        % blank-before-filter: NaN out BOTH the source motion-blanks and the
+        % cardiac windows, interp across them only so filtfilt stays stable, then
+        % restore them to NaN. Restoring the source blanks (not just cardiac) keeps
+        % motion-blanked time out of the valid-duration denominator and detection --
+        % it is never treated as real signal.
+        bl = ~isfinite(x);                            % source motion-blanks
         for ri = rIdx(:)'
-            lo = max(1,ri-half); hi = min(N,ri+half); bl(lo:hi) = true;
+            lo = max(1,ri-half); hi = min(N,ri+half); bl(lo:hi) = true;   % + cardiac
         end
         xb = x; xb(bl) = NaN;
         xf = fillmissing(xb,'linear','EndValues','nearest');
         xf(~isfinite(xf)) = 0;
         y = filtfilt(sos,gd,xf);
-        y(bl) = NaN;                                  % keep cardiac gaps as NaN
+        y(bl) = NaN;                                  % restore source + cardiac gaps
         cond(:,ch) = y;
         [idx, med] = detect_crossings(y, fs, k, sigmaWin);         % expensive moving-MAD: once
         spkIdx{ch} = group_events(y, med, idx, fs, spikeRefr);     % individual firings
@@ -125,14 +129,16 @@ function mmc = extract_mmc(blankFile, hrbrFile, opts)
     qc.nFirings    = cellfun(@numel, spkIdx);          % 1x3, individual firings
     qc.nBursts     = cellfun(@numel, brsIdx);          % 1x3, grouped bursts
     Lh = round(0.1*fs); seg = (-Lh:Lh).'; qc.periR_t = seg/fs;     % peri-R average +/-100ms
-    pr = zeros(numel(seg),3); pc = zeros(numel(seg),3); cnt = 0;
+    pr = zeros(numel(seg),3); nr = zeros(numel(seg),3);            % raw sum + per-position valid count
+    pc = zeros(numel(seg),3); nc = zeros(numel(seg),3);            % cond sum + per-position valid count
     for ri = rIdx(:)'
         if ri-Lh<1 || ri+Lh>N; continue; end
-        w = ri-Lh:ri+Lh; pr = pr + G(w,:);
-        cc = cond(w,:); cc(isnan(cc)) = 0; pc = pc + cc; cnt = cnt + 1;
+        w = ri-Lh:ri+Lh;
+        gg = G(w,:);    mg = isfinite(gg); gg(~mg) = 0; pr = pr + gg; nr = nr + mg;
+        cc = cond(w,:); mc = isfinite(cc); cc(~mc) = 0; pc = pc + cc; nc = nc + mc;
     end
-    if cnt > 0; qc.periR_raw = pr/cnt; qc.periR_cond = pc/cnt;
-    else; qc.periR_raw = nan(numel(seg),3); qc.periR_cond = nan(numel(seg),3); end
+    qc.periR_raw  = pr ./ max(nr,1); qc.periR_raw(nr==0)  = NaN;   % NaN-safe average (ignores blanks)
+    qc.periR_cond = pc ./ max(nc,1); qc.periR_cond(nc==0) = NaN;
     try                                                 % Welch PSD raw vs conditioned
         Lp = 2^floor(log2(min(N, round(4*fs)))); wp = hann(Lp);
         [Pr,fp] = pwelch(fillmissing(G,'constant',0), wp, Lp/2, Lp, fs);
