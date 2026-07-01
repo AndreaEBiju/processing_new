@@ -102,8 +102,9 @@ function mmc = extract_mmc(blankFile, hrbrFile, opts)
         y = filtfilt(sos,gd,xf);
         y(bl) = NaN;                                  % keep cardiac gaps as NaN
         cond(:,ch) = y;
-        spkIdx{ch} = detect_bursts(y, fs, k, sigmaWin, spikeRefr);  % individual firings
-        brsIdx{ch} = detect_bursts(y, fs, k, sigmaWin, burstRefr);  % grouped episodes
+        [idx, med] = detect_crossings(y, fs, k, sigmaWin);         % expensive moving-MAD: once
+        spkIdx{ch} = group_events(y, med, idx, fs, spikeRefr);     % individual firings
+        brsIdx{ch} = group_events(y, med, idx, fs, burstRefr);     % grouped episodes
     end
 
     % ---- sliding-window rate + per-window peak amplitude, for BOTH levels ----
@@ -210,24 +211,30 @@ function rT = detect_rpeaks(ecg, fsE)
     rT = locs(:)/fsE;
 end
 
-function pk = detect_bursts(y, fs, k, sigmaWin, refr)
-% Detect muscle-firing bursts with a moving median/MAD adaptive threshold at
-% k*sigma. The sigma window (sigmaWin) must be LONG -- many burst-and-gap cycles
-% -- so the MAD tracks the noise floor (pulled down by the quiet inter-burst
-% stretches) and adapts to slow noise/gain drift, WITHOUT being inflated by the
-% amplitude of the burst it currently sits inside (which a short window is, so a
-% short window rides up with the bursts and misses them). Supra-threshold
-% crossings are grouped into bursts by the refractory gap; one peak per burst.
+function [idx, med] = detect_crossings(y, fs, k, sigmaWin)
+% Adaptive moving median/MAD threshold at k*sigma; returns the supra-threshold
+% sample indices and the moving baseline (med, reused for peak picking). This is
+% the expensive part (two long-window moving medians) and is refractory-INDEPENDENT
+% -- compute it once, then group at as many refractory levels as needed.
+% The sigma window (sigmaWin) must be LONG -- many burst-and-gap cycles -- so the
+% MAD tracks the noise floor (pulled down by the quiet inter-burst stretches) and
+% adapts to slow noise/gain drift, WITHOUT being inflated by the amplitude of the
+% burst it currently sits inside (a short window rides up with the bursts and
+% misses them).
     win = max(round(3*fs), round(sigmaWin*fs));             % long window (>> burst duration)
     med = movmedian(y, win, 'omitnan');
     sig = movmedian(abs(y-med), win, 'omitnan') / 0.6745;   % moving MAD (adaptive, not burst-inflated)
     sig(~isfinite(sig) | sig==0) = median(sig(isfinite(sig)&sig>0),'omitnan');
     above = (abs(y-med) > k*sig) & isfinite(y);
     idx = find(above);
+end
+
+function pk = group_events(y, med, idx, fs, refr)
+% Group supra-threshold crossings into events separated by more than refr of VALID
+% (non-blanked) time; one peak (max |y-med|) per event. Gaps are measured in valid
+% time so a cardiac blank between two crossings is NOT counted as an inter-event
+% gap -- events are bridged across blanks rather than split/terminated by them.
     if isempty(idx); pk = []; return; end
-    % gaps measured in VALID (non-blanked) time: a cardiac blank between two
-    % supra-threshold events is NOT counted as an inter-burst gap, so bursts are
-    % bridged across the blanks rather than split/terminated by them.
     cumValid = cumsum(isfinite(y));
     vgap = [Inf; (cumValid(idx(2:end)) - cumValid(idx(1:end-1)))/fs];
     burstId = cumsum(vgap > refr);
