@@ -104,10 +104,11 @@ function plot_mmc(mmcFile, opts)
 
     nexttile;                                            % 2A signal + adaptive threshold + peaks
     yv = y(iw); tv = t(iw);
-    win = max(3,round(m.params.sigmaWin*fs));
-    med = movmedian(yv,win,'omitnan'); sg = movmedian(abs(yv-med),win,'omitnan')/0.6745;
+    win  = max(round(3*fs), round(m.params.sigmaWin*fs));
+    medF = movmedian(y, win, 'omitnan');                    % full-channel moving baseline
+    sgF  = movmedian(abs(y - medF), win, 'omitnan')/0.6745; % moving MAD (matches detector)
     plot(tv,yv,'Color',col(1,:)); hold on;
-    plot(tv,med+m.params.k*sg,'r-'); plot(tv,med-m.params.k*sg,'r-');
+    plot(tv, medF(iw)+m.params.k*sgF(iw), 'r-'); plot(tv, medF(iw)-m.params.k*sgF(iw), 'r-');
     pkw = pk(t(pk)>=w(1) & t(pk)<=w(2));
     plot(t(pkw),y(pkw),'v','Color',col(2,:),'MarkerFaceColor',col(2,:),'MarkerSize',5);
     title(sprintf('2A. Conditioned + %g\\sigma threshold + burst peaks (ch %d)',m.params.k,ch));

@@ -42,7 +42,7 @@ function mmc = extract_mmc(blankFile, hrbrFile, opts)
         'extract_mmc: give a cardiac source: opts.rpeakVar OR opts.ecgVar OR opts.rpeakTimes.');
     g = @(f,d) getdef(opts,f,d);
     band   = g('band',[2 50]);   W = g('W',10);  S = g('S',1);
-    k      = g('k',4);           sigmaWin = g('sigmaWin',1);
+    k      = g('k',3);           sigmaWin = g('sigmaWin',30);   % LONG (>> burst duration)
     refr   = g('refractory',0.5);cardMs = g('cardiacBlankMs',25);
     minVF  = g('minValidFrac',0.5);
     dW = g('delayW',30); dS = g('delayStep',5); dMax = g('delayMaxLag',3);
@@ -230,12 +230,17 @@ function rT = detect_rpeaks(ecg, fsE)
 end
 
 function pk = detect_bursts(y, fs, k, sigmaWin, refr)
-% Adaptive median/sigma threshold (robust), group supra-threshold crossings into
-% bursts using a refractory merge gap, return one peak (max |y|) per burst.
-    win = max(3, round(sigmaWin*fs));
+% Detect muscle-firing bursts with a moving median/MAD adaptive threshold at
+% k*sigma. The sigma window (sigmaWin) must be LONG -- many burst-and-gap cycles
+% -- so the MAD tracks the noise floor (pulled down by the quiet inter-burst
+% stretches) and adapts to slow noise/gain drift, WITHOUT being inflated by the
+% amplitude of the burst it currently sits inside (which a short window is, so a
+% short window rides up with the bursts and misses them). Supra-threshold
+% crossings are grouped into bursts by the refractory gap; one peak per burst.
+    win = max(round(3*fs), round(sigmaWin*fs));             % long window (>> burst duration)
     med = movmedian(y, win, 'omitnan');
-    sig = movmedian(abs(y-med), win, 'omitnan') / 0.6745;   % robust moving sigma (MAD)
-    sig(sig==0 | ~isfinite(sig)) = median(sig(isfinite(sig)&sig>0),'omitnan');
+    sig = movmedian(abs(y-med), win, 'omitnan') / 0.6745;   % moving MAD (adaptive, not burst-inflated)
+    sig(~isfinite(sig) | sig==0) = median(sig(isfinite(sig)&sig>0),'omitnan');
     above = (abs(y-med) > k*sig) & isfinite(y);
     idx = find(above);
     if isempty(idx); pk = []; return; end
