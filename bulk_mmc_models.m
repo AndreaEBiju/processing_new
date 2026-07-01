@@ -28,8 +28,8 @@ function R = bulk_mmc_models(queueFile, saveDir, opts)
 % + whiten_figure (+ save_one_figure to save). compile_mmc must be on the path.
 
     if nargin < 1 || isempty(queueFile); queueFile = fullfile(pwd,'gemsplots_queue.mat'); end
-    if nargin < 2; saveDir = ''; end
     if nargin < 3; opts = struct(); end
+    if nargin < 2 || isempty(saveDir); saveDir = ask_savedir(); end   % prompt if not given
     chMode = 'mean'; if isfield(opts,'channelMode')&&~isempty(opts.channelMode); chMode = lower(opts.channelMode); end
     formats = {'png','svg','fig'};
     assert(license('test','Statistics_Toolbox') || exist('fitlme','file')==2, ...
@@ -258,4 +258,14 @@ function q = bh_fdr(p)
     p = p(:); m = numel(p); [ps,ix] = sort(p); q = nan(m,1);
     qs = ps .* m ./ (1:m)'; for i=m-1:-1:1; qs(i)=min(qs(i),qs(i+1)); end
     q(ix) = min(qs,1);
+end
+
+function sd = ask_savedir()
+% Prompt for a save folder when none was passed; '' (display only) if cancelled
+% or if there is no UI available (headless / -nodisplay).
+    sd = '';
+    if usejava('awt') && ~isdeployed
+        p = uigetdir(pwd, 'Select a folder to save MMC figures  (Cancel = display only)');
+        if ischar(p) && ~isequal(p,0); sd = p; end
+    end
 end

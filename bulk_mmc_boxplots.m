@@ -16,8 +16,8 @@ function figs = bulk_mmc_boxplots(queueFile, saveDir, opts)
 % opts.metrics     : subset of {'rate','burst','amp'}.                 [all three]
 
     if nargin < 1 || isempty(queueFile); queueFile = fullfile(pwd,'gemsplots_queue.mat'); end
-    if nargin < 2; saveDir = ''; end
     if nargin < 3; opts = struct(); end
+    if nargin < 2 || isempty(saveDir); saveDir = ask_savedir(); end   % prompt if not given
     assert(exist('compile_mmc','file')==2, 'bulk_mmc_boxplots: compile_mmc.m not on path.');
     assert(exist('bulk_plot_boxviolin','file')==2, 'bulk_mmc_boxplots: bulk_plot_boxviolin.m not on path.');
     formats = {'png','svg','fig'};
@@ -67,4 +67,14 @@ function groups = get_groups(queueFile, opts)
         if isfield(Q,'condition'); groups = { unique(Q.condition,'stable') }; end
     catch; end
     if isempty(groups); error('bulk_mmc_boxplots: no groups given and none found in the queue.'); end
+end
+
+function sd = ask_savedir()
+% Prompt for a save folder when none was passed; '' (display only) if cancelled
+% or if there is no UI available (headless / -nodisplay).
+    sd = '';
+    if usejava('awt') && ~isdeployed
+        p = uigetdir(pwd, 'Select a folder to save MMC figures  (Cancel = display only)');
+        if ischar(p) && ~isequal(p,0); sd = p; end
+    end
 end
