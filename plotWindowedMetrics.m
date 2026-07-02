@@ -278,43 +278,36 @@ function figH = renderWindowedFigure(state, animalsAll, conds, spec, ...
     nW = numel(winSecs);
     nAn = numel(animalsAll);
 
-    % data{ci, wi}(ai) = normalised window value for that condition/window/animal
+    % One column entry per RECOVERY TRIAL (NOT per animal): pair each recovery to
+    % ITS OWN baseline by trial stem (fallback same animal+condition), so two
+    % trials of the same condition from the same animal are kept as SEPARATE
+    % observations. Row index p is consistent across windows, so ConnectPaired
+    % still links a single trial across its own windows.
+    stems = cellfun(@trialStem, state.files, 'UniformOutput', false);
+
     data = cell(nC, nW);
-    for ci = 1:nC
-        for wi = 1:nW
-            data{ci,wi} = nan(nAn,1);
-        end
-    end
-
-    % Detailed per-(condition, animal) status so we can explain why a
-    % column might be blank.
     reasons = cell(0,1);
-    condUsable = false(nC,1);   % true if any animal contributed any window value
+    condUsable = false(nC,1);   % true if any trial contributed any window value
     for ci = 1:nC
-        cond = conds{ci};
-        for ai = 1:nAn
-            aniName = animalsAll{ai};
-            iBase = find( strcmpi(state.condition, cond)     & ...
-                          strcmpi(state.phase,     'baseline')& ...
-                          strcmpi(state.animal,    aniName), 1);
-            iRec  = find( strcmpi(state.condition, cond)     & ...
-                          strcmpi(state.phase,     'recovery')& ...
-                          strcmpi(state.animal,    aniName), 1);
+        cond   = conds{ci};
+        recIdx = find( strcmpi(state.condition, cond) & strcmpi(state.phase, 'recovery') );
+        nT     = numel(recIdx);
+        for wi = 1:nW, data{ci,wi} = nan(nT,1); end
+        for p = 1:nT
+            iRec    = recIdx(p);
+            aniName = state.animal{iRec};
 
-            % If BOTH are missing -> animal simply wasn't run here; silent skip
-            if isempty(iBase) && isempty(iRec)
-                continue;
+            % this trial's own baseline: same trial stem, else same animal+condition
+            iBase = find( strcmpi(state.condition, cond) & strcmpi(state.phase, 'baseline') ...
+                        & strcmp(stems, stems{iRec}), 1 );
+            if isempty(iBase)
+                iBase = find( strcmpi(state.condition, cond) & strcmpi(state.phase, 'baseline') ...
+                            & strcmpi(state.animal, aniName), 1 );
             end
             if isempty(iBase)
                 reasons{end+1,1} = sprintf( ...
-                    '%s / animal=%s : no BASELINE file in queue (recovery=%s)', ...
+                    '%s / animal=%s : no BASELINE paired to recovery=%s', ...
                     cond, aniName, briefName(state.files{iRec})); %#ok<AGROW>
-                continue;
-            end
-            if isempty(iRec)
-                reasons{end+1,1} = sprintf( ...
-                    '%s / animal=%s : no RECOVERY file in queue (baseline=%s)', ...
-                    cond, aniName, briefName(state.files{iBase})); %#ok<AGROW>
                 continue;
             end
 
@@ -331,7 +324,7 @@ function figH = renderWindowedFigure(state, animalsAll, conds, spec, ...
             for wi = 1:nW
                 wm = windowThisMetric(iRec, 1, wi);
                 if isnan(wm), continue; end
-                data{ci,wi}(ai) = (wm - bm) / bm;
+                data{ci,wi}(p) = (wm - bm) / bm;
                 anyWindow = true;
             end
             if anyWindow
@@ -433,6 +426,14 @@ function out = ternary(c,a,b), if c, out = a; else, out = b; end, end
 function s = briefName(fp)
     [~, b, e] = fileparts(char(fp));
     s = [b e];
+end
+
+function s = trialStem(fp)
+% Trial id shared by a baseline/recovery pair = the filename with the phase
+% token (and everything after it) stripped, so repeats of the same condition
+% from the same animal (e.g. ..._CME1_... vs ..._CME2_...) get DISTINCT stems.
+    [~, b] = fileparts(char(fp));
+    s = regexprep(b, '_(stim_rec|stim_bl|recovery|baseline|rec|bl)_.*$', '', 'ignorecase');
 end
 
 function v = getf(s, name)
