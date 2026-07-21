@@ -116,6 +116,20 @@ function P = pipeline_params()
     P.burstVoidThresh    = 0.7;    % bimodality required (Pasquale void parameter)
     P.burstMaxThreshMs   = 100;    % intra-burst ISI peak must be below this
 
+    % ---- Step 7: gap-aware DFA (fractal scaling) --------------------------
+    P.dfaMinScale           = 4;    % smallest box size n (beats/bins)
+    P.dfaMaxScaleFrac       = 0.25; % largest box size as frac of longest valid run
+    P.dfaNScales            = 20;   % number of log-spaced box sizes
+    P.dfaShortRange         = [4 16];  % alpha1 fit range
+    P.dfaLongRangeMinScale  = 16;   % alpha2 fit uses scales above this
+    P.dfaMinWindowsPerScale = 8;    % scale excluded from fit below this window count
+    P.dfaDetrendOrder       = 1;    % linear detrending
+    P.dfaMinRunLen          = 4;    % skip valid runs shorter than this
+    P.dfaBeatGapTolSec      = 1e-3; % cardiac-only; floating-point slop tolerance
+                                    % for detecting a dropped beat between two
+                                    % surviving RR_intervals entries -- NOT a
+                                    % physiological threshold, keep small
+
     % ---- Plotting ---------------------------------------------------------
     P.plotMaxPoints      = 200000; % max points drawn in full-trace plots
                                    % (display decimation only; analysis uses

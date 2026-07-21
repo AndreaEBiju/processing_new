@@ -290,8 +290,14 @@ function out = analyzeOneSignal(signal, fs, cutoff, order, folderpath, condition
             conditionLabel, hrv, rmssd, pnn5, sd1, sd2);
     end
 
-    % DFA intentionally omitted — not appropriate for interrupted/non-stationary recordings
-%     [alpha1, alpha2, nVals, F] = dfaRR(RR_intervals);
+    % ---------------- Gap-aware DFA (fractal scaling) ----------------
+    if isempty(RR_intervals) || numel(RR_intervals) < 2
+        dfaOut = struct('alpha1', NaN, 'alpha2', NaN, 'alphaFull', NaN, ...
+            'R2_1', NaN, 'R2_2', NaN, 'nCross', NaN, 'nWindows', [], ...
+            'excludedScales', []);
+    else
+        dfaOut = dfaRR_gapAware(RR_intervals, RR_times, pipeline_params());
+    end
 
     % ---------------- Diagnostic figures ----------------
     if figtrue
@@ -480,6 +486,14 @@ function out = analyzeOneSignal(signal, fs, cutoff, order, folderpath, condition
         'hrMinStretchSec', 'hrMinPeaksInStretch');
 
     sampEnWinSec = 60;  % must match value used inside movingCardiacMetrics
+    dfa_alpha1         = dfaOut.alpha1;
+    dfa_alpha2         = dfaOut.alpha2;
+    dfa_alphaFull      = dfaOut.alphaFull;
+    dfa_R2_1           = dfaOut.R2_1;
+    dfa_R2_2           = dfaOut.R2_2;
+    dfa_nCross         = dfaOut.nCross;
+    dfa_nWindows       = dfaOut.nWindows;
+    dfa_excludedScales = dfaOut.excludedScales;
     save(hrvFile, ...
         'hrv', 'rmssd', 'pnn5', 'sd1', 'sd2', ...
         'sampEn', 'appxEn', ...
@@ -487,7 +501,9 @@ function out = analyzeOneSignal(signal, fs, cutoff, order, folderpath, condition
         'heartlocs', 'invalidMask', 'edgeMask', 'blankIdx', 'edgeBufferSec', ...
         'metrics_t', 'hrv_series', 'rmssd_series', 'pnn5_series', ...
         'sd1_series', 'sd2_series', 'sampEn_series', 'sampEnWinSec', 'nRR_used', ...
-        't', 'winSec', 'hrBrWinSec', 'stepSec', 'minRR');
+        't', 'winSec', 'hrBrWinSec', 'stepSec', 'minRR', ...
+        'dfa_alpha1', 'dfa_alpha2', 'dfa_alphaFull', 'dfa_R2_1', 'dfa_R2_2', ...
+        'dfa_nCross', 'dfa_nWindows', 'dfa_excludedScales');
 
     % ---------------- Output struct ----------------
     out                        = struct();
@@ -511,6 +527,14 @@ function out = analyzeOneSignal(signal, fs, cutoff, order, folderpath, condition
     out.pnn5                   = pnn5;
     out.sd1                    = sd1;
     out.sd2                    = sd2;
+    out.dfa_alpha1             = dfaOut.alpha1;
+    out.dfa_alpha2             = dfaOut.alpha2;
+    out.dfa_alphaFull          = dfaOut.alphaFull;
+    out.dfa_R2_1               = dfaOut.R2_1;
+    out.dfa_R2_2               = dfaOut.R2_2;
+    out.dfa_nCross             = dfaOut.nCross;
+    out.dfa_nWindows           = dfaOut.nWindows;
+    out.dfa_excludedScales     = dfaOut.excludedScales;
     out.hrv_series             = hrv_series;
     out.rmssd_series           = rmssd_series;
     out.pnn5_series            = pnn5_series;

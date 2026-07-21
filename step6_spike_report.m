@@ -59,7 +59,7 @@ function D = step6_spike_report(D, P, plotMode)
         M.fracISIclean = M.nISIclean / max(numel(isi),1);
 
         % --- firing-rate trace (blanking-corrected) ---
-        [M.fr_t, M.fr_hz] = firing_rate(cen, valid, N, fs, P.frBinSec);
+        [M.fr_t, M.fr_hz, M.fr_validFrac] = firing_rate(cen, valid, N, fs, P.frBinSec);
 
         % --- regularity (gap-clean ISIs only) ---
         if nnz(isClean) >= 2
@@ -123,7 +123,7 @@ function M = emptyMetrics()
     M = struct('label','','condition','','nSpikes',0,'validDur_s',NaN,'meanRate_hz',NaN, ...
         'medianVpp_uv',NaN,'medianFWHM_ms',NaN,'CV',NaN,'CV2',NaN,'LV',NaN,'refracViolFrac',NaN, ...
         'nISItotal',0,'nISIclean',0,'fracISIclean',NaN, ...
-        'fanoCanon',NaN,'fanoSlope',NaN,'fano_T',[],'fano_F',[],'fr_t',[],'fr_hz',[], ...
+        'fanoCanon',NaN,'fanoSlope',NaN,'fano_T',[],'fano_F',[],'fr_t',[],'fr_hz',[],'fr_validFrac',[], ...
         'acg_lag',[],'acg',[],'psd_f',[],'psd_p',[],'cv2_t',[],'cv2_roll',[], ...
         'meanWaveform',[],'bandLo',[],'bandHi',[],'wf_t_ms',[],'burst',emptyBurst());
 end
@@ -137,14 +137,15 @@ function s = burstLine(B)
 end
 
 % ======================================================================
-function [t, fr] = firing_rate(cen, valid, N, fs, binSec)
+function [t, fr, validFrac] = firing_rate(cen, valid, N, fs, binSec)
     binN = max(1, round(binSec*fs)); nB = ceil(N/binN);
-    edges = (0:nB)*binN; t = nan(nB,1); fr = nan(nB,1);
+    edges = (0:nB)*binN; t = nan(nB,1); fr = nan(nB,1); validFrac = zeros(nB,1);
     cnt = histcounts(cen, edges+0.5);
     cv = [0; cumsum(double(valid))];
     for b = 1:nB
         i0 = edges(b)+1; i1 = min(N, edges(b+1));
         vsec = (cv(i1+1)-cv(i0))/fs;
+        validFrac(b) = vsec / ((i1-i0+1)/fs); % fraction of this bin's duration that was valid
         if vsec > 0; fr(b) = cnt(b)/vsec; end
         t(b) = ((i0+i1)/2-1)/fs;
     end

@@ -1,9 +1,14 @@
-function R = bulk_mixed_models(out, saveDir, logMetrics)
+function R = bulk_mixed_models(out, saveDir, logMetrics, includeSystemic)
 % BULK_MIXED_MODELS  Mixed-effects test of the Mechanical x Electrical interaction
 % (synergy) for every metric, with animal as a random factor.
 %
 %   R = bulk_mixed_models(out)            % out = output of run_pipeline_bulk
 %   R = bulk_mixed_models(out, saveDir)   % also writes CSV summaries
+%   R = bulk_mixed_models(out, saveDir, logMetrics, false)  % skip systemic (HR/HRV)
+%       metrics entirely -- avoids touching whatever gemsplots_queue.mat /
+%       buildFileQueue state happens to exist in the current directory (that
+%       loader can pop its own interactive UI). Default true, unchanged for
+%       every pre-existing caller.
 %
 % MODEL
 %   Response y = per-recording baseline-normalized change of the metric,
@@ -43,6 +48,7 @@ function R = bulk_mixed_models(out, saveDir, logMetrics)
     if nargin < 3 || isempty(logMetrics)
         logMetrics = {'HRV','RMSSD','pNN5','SD1','SD2'};
     end
+    if nargin < 4 || isempty(includeSystemic); includeSystemic = true; end
     formats = {'png','svg','fig'};
     assert(license('test','Statistics_Toolbox') || exist('fitlme','file')==2, ...
         'bulk_mixed_models: needs the Statistics & Machine Learning Toolbox (fitlme).');
@@ -70,28 +76,30 @@ function R = bulk_mixed_models(out, saveDir, logMetrics)
     maybe_plot(hm, s.metric, saveDir, formats, false);
 
     % ---------------- systemic metrics (HR / HRV loaders) ------------------
-    haveLoaders = exist('buildFileQueue','file')==2 && exist('loadAllSeriesCached','file')==2;
-    if haveLoaders
-        try
-            Tsys = build_systemic_tables();   % struct array .label, .T
-            for k = 1:numel(Tsys)
-                % normal-scale (every metric)
-                [s, c, hm] = fit_metric(Tsys(k).T, Tsys(k).label, 'systemic', false);
-                summ{end+1} = s; cellRows = [cellRows; c]; %#ok<AGROW>
-                maybe_plot(hm, s.metric, saveDir, formats, false);
-                % extra log-scale heatmap for the noisy ratio metrics
-                if any(strcmpi(Tsys(k).label, logMetrics))
-                    [s2, c2, hm2] = fit_metric(Tsys(k).T, [Tsys(k).label ' (log)'], 'systemic', true);
-                    summ{end+1} = s2; cellRows = [cellRows; c2]; %#ok<AGROW>
-                    maybe_plot(hm2, s2.metric, saveDir, formats, true);
+    if includeSystemic
+        haveLoaders = exist('buildFileQueue','file')==2 && exist('loadAllSeriesCached','file')==2;
+        if haveLoaders
+            try
+                Tsys = build_systemic_tables();   % struct array .label, .T
+                for k = 1:numel(Tsys)
+                    % normal-scale (every metric)
+                    [s, c, hm] = fit_metric(Tsys(k).T, Tsys(k).label, 'systemic', false);
+                    summ{end+1} = s; cellRows = [cellRows; c]; %#ok<AGROW>
+                    maybe_plot(hm, s.metric, saveDir, formats, false);
+                    % extra log-scale heatmap for the noisy ratio metrics
+                    if any(strcmpi(Tsys(k).label, logMetrics))
+                        [s2, c2, hm2] = fit_metric(Tsys(k).T, [Tsys(k).label ' (log)'], 'systemic', true);
+                        summ{end+1} = s2; cellRows = [cellRows; c2]; %#ok<AGROW>
+                        maybe_plot(hm2, s2.metric, saveDir, formats, true);
+                    end
                 end
+            catch ME
+                warning('bulk_mixed_models:sys','systemic metrics skipped (%s)', ME.message);
             end
-        catch ME
-            warning('bulk_mixed_models:sys','systemic metrics skipped (%s)', ME.message);
+        else
+            warning('bulk_mixed_models:sys', ...
+                'buildFileQueue/loadAllSeriesCached not on path -- systemic metrics skipped.');
         end
-    else
-        warning('bulk_mixed_models:sys', ...
-            'buildFileQueue/loadAllSeriesCached not on path -- systemic metrics skipped.');
     end
 
     % ---------------- assemble + report ------------------------------------

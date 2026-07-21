@@ -124,6 +124,9 @@ D = step5c_modality_test(D, P, plotMode);
 % in D.metrics(k) for the bulk stage.
 D = step6_spike_report(D, P, plotMode);
 
+%% Step 7 — gap-aware DFA (fractal scaling) on the blanking-corrected firing rate
+D = step7_dfa_report(D, P, plotMode);
+
 %% Save this condition's summary (run once per file, naming the condition)
 % Process each file (baseline, recovery, ...) through the steps above, then:
 pipeline_save_summary(D, P, 'baseline');   % <- change name per file: 'baseline','recovery',...

@@ -32,6 +32,9 @@ function outPath = pipeline_save_summary(D, P, conditionName)
     [S.t, S.excess_uv, S.rate_binned, S.validFrac, S.meanWaveform] = deal(cell(1, nCh));
     [S.featWidth, S.featVpp] = deal(cell(1, nCh));   % per-spike feature distributions
     [S.meanExcess, S.meanRate, S.medSigma, S.nSpikes, S.validSec] = deal(nan(1, nCh));
+    [S.dfa_alpha1, S.dfa_alpha2, S.dfa_alphaFull, S.dfa_nCross] = deal(nan(1, nCh));
+    S.dfa_nWindows = cell(1, nCh);
+    hasDfa = isfield(D, 'dfa');
 
     for k = 1:nCh
         env = D.envelope(k);
@@ -55,6 +58,14 @@ function outPath = pipeline_save_summary(D, P, conditionName)
         S.meanWaveform{k} = D.spikes(k).meanWaveform;
         S.nSpikes(k)      = D.spikes(k).nSpikes;
         S.validSec(k)     = D.spikes(k).validSec;
+
+        if hasDfa
+            S.dfa_alpha1(k)    = D.dfa(k).alpha1;
+            S.dfa_alpha2(k)    = D.dfa(k).alpha2;
+            S.dfa_alphaFull(k) = D.dfa(k).alphaFull;
+            S.dfa_nCross(k)    = D.dfa(k).nCross;
+            S.dfa_nWindows{k}  = D.dfa(k).nWindows;
+        end
     end
     if isfield(D.spikes, 'wf_t_ms'); S.wf_t_ms = D.spikes(1).wf_t_ms; end
 

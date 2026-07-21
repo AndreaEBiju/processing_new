@@ -20,6 +20,12 @@ function out = run_pipeline_bulk(P, opts)
 % opts (optional): .cacheFile (default ./bulk_cache.mat), .forceRefresh
 % (default false), .metricsBox {'rate','vpp','fwhm','cv2'}, .metricsSyn
 % {'rate','excess','vpp','fwhm','cv2'}.
+%
+% Non-interactive use (e.g. matlab -batch, no display available): pass
+% opts.conv (struct, see bulk_conventions_ui.m) and opts.folders (cellstr of
+% root folders to recursively scan) to skip bulk_conventions_ui/bulk_queue_ui
+% and defineGroupsUI entirely. Groups then stay empty and plotting is skipped
+% (same as clicking Cancel on defineGroupsUI) -- caller gets out.raw/out.norm.
 
     if nargin < 1 || isempty(P);    P = pipeline_params(); end
     if nargin < 2 || isempty(opts); opts = struct(); end
@@ -30,12 +36,21 @@ function out = run_pipeline_bulk(P, opts)
     if ~isfield(opts,'perFileFigures'); opts.perFileFigures = true; end   % false = fast metrics-only
     if ~isfield(opts,'saveFigsDir');  opts.saveFigsDir = ''; end          % save combined plots here (png/svg/fig)
     if ~isfield(opts,'rateYMax');     opts.rateYMax = []; end             % cap upper y on the firing-rate plots ([] = auto)
+    if ~isfield(opts,'conv');        opts.conv = []; end
+    if ~isfield(opts,'folders');     opts.folders = {}; end
     cf = opts.cacheFile;
+    nonInteractive = ~isempty(opts.conv) && ~isempty(opts.folders);
 
-    conv = bulk_conventions_ui(cf);
-    if isempty(conv); fprintf('Cancelled at conventions.\n'); out = []; return; end
+    if nonInteractive
+        conv = opts.conv;
+        if isstruct(conv) && ~isempty(fieldnames(conv)); bulk_cache_set(cf, 'conv', conv); end
+        files = bulk_scan_files(opts.folders, conv);
+    else
+        conv = bulk_conventions_ui(cf);
+        if isempty(conv); fprintf('Cancelled at conventions.\n'); out = []; return; end
 
-    files = bulk_queue_ui(conv, cf);   % table: Add folder -> recursive scan -> edit/delete -> Continue
+        files = bulk_queue_ui(conv, cf);   % table: Add folder -> recursive scan -> edit/delete -> Continue
+    end
     if isempty(files); fprintf('No files queued.\n'); out = []; return; end
 
     harvest = load_harvest(cf);
@@ -105,7 +120,9 @@ function out = run_pipeline_bulk(P, opts)
     if isempty(rawRows); fprintf('Nothing harvested.\n'); out = []; return; end
 
     groups = [];
-    if exist('defineGroupsUI','file')==2
+    if nonInteractive
+        prior = bulk_cache_get(cf, 'groups'); if iscell(prior); groups = prior; end
+    elseif exist('defineGroupsUI','file')==2
         prior = bulk_cache_get(cf, 'groups'); if ~iscell(prior); prior = {}; end
         [groups, ok] = defineGroupsUI(unique({rawRows.condition}), prior);   % prefilled from cache
         if ~ok; groups = []; end
