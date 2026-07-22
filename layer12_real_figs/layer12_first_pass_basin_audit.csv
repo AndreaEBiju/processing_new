@@ -1,0 +1,5 @@
+candidateIdx,candidateLabel,channel,resnorm2,selected
+1,raw,RVN,4710.11519497155,0
+1,raw,LVN,9601.8604146524,0
+2,swapped,RVN,4710.11519497155,1
+2,swapped,LVN,9601.86041465186,1

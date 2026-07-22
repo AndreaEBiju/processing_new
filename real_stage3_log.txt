@@ -1,0 +1,132 @@
+
+================ Stage 3 (CV2/FWHM term-share fit): RVN ================
+[stage3-RVN] 27 combined-condition trials (finite rate+CV2+FWHM) across 9 distinct M x E cells:
+    M10 x E10 : 3 trial(s)
+    M10 x E100 : 3 trial(s)
+    M10 x E1000 : 3 trial(s)
+    M50 x E10 : 3 trial(s)
+    M50 x E100 : 3 trial(s)
+    M50 x E1000 : 3 trial(s)
+    M100 x E10 : 3 trial(s)
+    M100 x E100 : 3 trial(s)
+    M100 x E1000 : 3 trial(s)
+[stage3-RVN] L9 thinness (worse than Stage 2 -- see file header): 17 total params (9 fixed + 8 new: v_1,v_2 + 6 refs) vs 27 x 3 = 81 correlated data points.
+[stage3-RVN] inverse-variance weights: rate=0.02141, CV2=79.24, FWHM=19.37 (1/sample-variance across these trials)
+[stage3-RVN] 8/20 restarts converged (exitflag>0).
+[stage3-RVN] best resnorm=148.553 (includes fixed rate offset=100.859), exitflag=3
+[stage3-RVN] theta=[v_1=0.04419, v_2=1071, CV2_cap=1.144, CV2_1=1.738e+05, CV2_2=0.7773, FWHM_cap=1.82, FWHM_1=1.328e+06, FWHM_2=7.431e-09]
+[stage3-RVN] spread among 16 near-best restarts:
+    v_1        [0.04419, 176.6]
+    v_2        [213.4, 1073]
+    CV2_cap    [1.141, 1.144]
+    CV2_1      [44.62, 1.738e+05]
+    CV2_2      [0.6586, 0.7941]
+    FWHM_cap   [1.82, 1.833]
+    FWHM_1     [333.9, 1.328e+06]
+    FWHM_2     [2.564e-14, 0.7831]
+[stage3-RVN] term shares per condition (v_1/v_2-based, decoupled from rate):
+    M10   x E10   : p_cap=0.8858  p_1=0.0000  p_2=0.1142
+    M10   x E100  : p_cap=0.8883  p_1=0.0000  p_2=0.1117
+    M10   x E1000 : p_cap=0.9065  p_1=0.0000  p_2=0.0935
+    M50   x E10   : p_cap=0.6110  p_1=0.0000  p_2=0.3890
+    M50   x E100  : p_cap=0.6171  p_1=0.0000  p_2=0.3829
+    M50   x E1000 : p_cap=0.6625  p_1=0.0000  p_2=0.3375
+    M100  x E10   : p_cap=0.4438  p_1=0.0000  p_2=0.5562
+    M100  x E100  : p_cap=0.4501  p_1=0.0000  p_2=0.5499
+    M100  x E1000 : p_cap=0.4993  p_1=0.0000  p_2=0.5007
+[stage3-RVN] p_cap range=[0.4438, 0.9065], p_1 range=[0.0000, 0.0000], p_2 range=[0.0935, 0.5562]
+[stage3-RVN] CV2  resnorm: WITH v_1/v_2=0.312608 vs WITHOUT (v_1=v_2=0)=0.328133 (4.73% improvement)
+[stage3-RVN] FWHM resnorm: WITH v_1/v_2=1.18349 vs WITHOUT (v_1=v_2=0)=1.3423 (11.83% improvement)
+[stage3-RVN] v_1/v_2 restart-spread flatness check: v_1 range=176.5, v_2 range=859.3 among 16 near-best restarts (resnorm range 1.375)
+[stage3-RVN] Sec 5.5 item 4 check -- mean squared residual, low- vs high-dominance trials:
+    CV2:  low-dominance=0.009636, high-dominance=0.01313
+    FWHM: low-dominance=0.06219, high-dominance=0.02914
+
+================ Stage 3 (CV2/FWHM term-share fit): LVN ================
+[stage3-LVN] 27 combined-condition trials (finite rate+CV2+FWHM) across 9 distinct M x E cells:
+    M10 x E10 : 3 trial(s)
+    M10 x E100 : 3 trial(s)
+    M10 x E1000 : 3 trial(s)
+    M50 x E10 : 3 trial(s)
+    M50 x E100 : 3 trial(s)
+    M50 x E1000 : 3 trial(s)
+    M100 x E10 : 3 trial(s)
+    M100 x E100 : 3 trial(s)
+    M100 x E1000 : 3 trial(s)
+[stage3-LVN] L9 thinness (worse than Stage 2 -- see file header): 17 total params (9 fixed + 8 new: v_1,v_2 + 6 refs) vs 27 x 3 = 81 correlated data points.
+[stage3-LVN] inverse-variance weights: rate=0.006156, CV2=40.63, FWHM=9.854 (1/sample-variance across these trials)
+[stage3-LVN] 20/20 restarts converged (exitflag>0).
+[stage3-LVN] best resnorm=111.109 (includes fixed rate offset=59.1093), exitflag=1
+[stage3-LVN] theta=[v_1=416.4, v_2=829.8, CV2_cap=1.035, CV2_1=0.08589, CV2_2=0.1995, FWHM_cap=1.729, FWHM_1=0.8041, FWHM_2=0.3544]
+[stage3-LVN] spread among 20 near-best restarts:
+    v_1        [0.1325, 821.7]
+    v_2        [0.1734, 829.8]
+    CV2_cap    [1.035, 1.035]
+    CV2_1      [0.02259, 0.7636]
+    CV2_2      [2.22e-14, 0.7179]
+    FWHM_cap   [1.729, 1.729]
+    FWHM_1     [0.05735, 1.273]
+    FWHM_2     [0.02395, 1.292]
+[stage3-LVN] term shares per condition (v_1/v_2-based, decoupled from rate):
+    M10   x E10   : p_cap=1.0000  p_1=0.0000  p_2=0.0000
+    M10   x E100  : p_cap=1.0000  p_1=0.0000  p_2=0.0000
+    M10   x E1000 : p_cap=1.0000  p_1=0.0000  p_2=0.0000
+    M50   x E10   : p_cap=1.0000  p_1=0.0000  p_2=0.0000
+    M50   x E100  : p_cap=1.0000  p_1=0.0000  p_2=0.0000
+    M50   x E1000 : p_cap=1.0000  p_1=0.0000  p_2=0.0000
+    M100  x E10   : p_cap=1.0000  p_1=0.0000  p_2=0.0000
+    M100  x E100  : p_cap=1.0000  p_1=0.0000  p_2=0.0000
+    M100  x E1000 : p_cap=1.0000  p_1=0.0000  p_2=0.0000
+[stage3-LVN] p_cap range=[1.0000, 1.0000], p_1 range=[0.0000, 0.0000], p_2 range=[0.0000, 0.0000]
+[stage3-LVN] CV2  resnorm: WITH v_1/v_2=0.639876 vs WITHOUT (v_1=v_2=0)=0.639876 (0.00% improvement)
+[stage3-LVN] FWHM resnorm: WITH v_1/v_2=2.6385 vs WITHOUT (v_1=v_2=0)=2.6385 (0.00% improvement)
+[stage3-LVN] v_1/v_2 restart-spread flatness check: v_1 range=821.6, v_2 range=829.7 among 20 near-best restarts (resnorm range 7.396e-06)
+[stage3-LVN] Sec 5.5 item 4 check -- mean squared residual, low- vs high-dominance trials:
+    CV2:  low-dominance=0.01907, high-dominance=0.0274
+    FWHM: low-dominance=0.09129, high-dominance=0.1029
+
+================ TOTAL channel Stage 3 ================
+[total] 90 TOTAL rows built for Stage 3 (paired RVN+LVN; rate summed, CV2/FWHM averaged).
+[stage3-TOTAL] 27 combined-condition trials (finite rate+CV2+FWHM) across 9 distinct M x E cells:
+    M10 x E10 : 3 trial(s)
+    M10 x E100 : 3 trial(s)
+    M10 x E1000 : 3 trial(s)
+    M50 x E10 : 3 trial(s)
+    M50 x E100 : 3 trial(s)
+    M50 x E1000 : 3 trial(s)
+    M100 x E10 : 3 trial(s)
+    M100 x E100 : 3 trial(s)
+    M100 x E1000 : 3 trial(s)
+[stage3-TOTAL] L9 thinness (worse than Stage 2 -- see file header): 17 total params (9 fixed + 8 new: v_1,v_2 + 6 refs) vs 27 x 3 = 81 correlated data points.
+[stage3-TOTAL] inverse-variance weights: rate=0.002856, CV2=68.78, FWHM=16.96 (1/sample-variance across these trials)
+[stage3-TOTAL] 7/20 restarts converged (exitflag>0).
+[stage3-TOTAL] best resnorm=125.005 (includes fixed rate offset=75.7871), exitflag=3
+[stage3-TOTAL] theta=[v_1=0.01606, v_2=2257, CV2_cap=1.079, CV2_1=3.869e+05, CV2_2=0.2776, FWHM_cap=1.771, FWHM_1=9.427e+05, FWHM_2=2.286e-09]
+[stage3-TOTAL] spread among 18 near-best restarts:
+    v_1        [0.01606, 211.3]
+    v_2        [2208, 2523]
+    CV2_cap    [1.079, 1.08]
+    CV2_1      [30.65, 3.869e+05]
+    CV2_2      [0.2548, 0.3927]
+    FWHM_cap   [1.771, 1.774]
+    FWHM_1     [71.37, 9.427e+05]
+    FWHM_2     [2.541e-14, 0.2059]
+[stage3-TOTAL] term shares per condition (v_1/v_2-based, decoupled from rate):
+    M10   x E10   : p_cap=0.9447  p_1=0.0000  p_2=0.0553
+    M10   x E100  : p_cap=0.9465  p_1=0.0000  p_2=0.0535
+    M10   x E1000 : p_cap=0.9582  p_1=0.0000  p_2=0.0418
+    M50   x E10   : p_cap=0.7746  p_1=0.0000  p_2=0.2254
+    M50   x E100  : p_cap=0.7806  p_1=0.0000  p_2=0.2194
+    M50   x E1000 : p_cap=0.8220  p_1=0.0000  p_2=0.1780
+    M100  x E10   : p_cap=0.6337  p_1=0.0000  p_2=0.3663
+    M100  x E100  : p_cap=0.6417  p_1=0.0000  p_2=0.3583
+    M100  x E1000 : p_cap=0.6992  p_1=0.0000  p_2=0.3008
+[stage3-TOTAL] p_cap range=[0.6337, 0.9582], p_1 range=[0.0000, 0.0000], p_2 range=[0.0418, 0.3663]
+[stage3-TOTAL] CV2  resnorm: WITH v_1/v_2=0.362032 vs WITHOUT (v_1=v_2=0)=0.378026 (4.23% improvement)
+[stage3-TOTAL] FWHM resnorm: WITH v_1/v_2=1.43381 vs WITHOUT (v_1=v_2=0)=1.533 (6.47% improvement)
+[stage3-TOTAL] v_1/v_2 restart-spread flatness check: v_1 range=211.3, v_2 range=315.4 among 18 near-best restarts (resnorm range 0.05696)
+[stage3-TOTAL] Sec 5.5 item 4 check -- mean squared residual, low- vs high-dominance trials:
+    CV2:  low-dominance=0.01387, high-dominance=0.01304
+    FWHM: low-dominance=0.06885, high-dominance=0.04051
+
+Saved to real_stage3_results.mat

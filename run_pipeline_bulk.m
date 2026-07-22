@@ -38,13 +38,18 @@ function out = run_pipeline_bulk(P, opts)
     if ~isfield(opts,'rateYMax');     opts.rateYMax = []; end             % cap upper y on the firing-rate plots ([] = auto)
     if ~isfield(opts,'conv');        opts.conv = []; end
     if ~isfield(opts,'folders');     opts.folders = {}; end
+    if ~isfield(opts,'files');       opts.files = []; end   % pre-built file list (struct array), bypasses bulk_scan_files too
     cf = opts.cacheFile;
-    nonInteractive = ~isempty(opts.conv) && ~isempty(opts.folders);
+    nonInteractive = ~isempty(opts.conv) && (~isempty(opts.folders) || ~isempty(opts.files));
 
     if nonInteractive
         conv = opts.conv;
         if isstruct(conv) && ~isempty(fieldnames(conv)); bulk_cache_set(cf, 'conv', conv); end
-        files = bulk_scan_files(opts.folders, conv);
+        if ~isempty(opts.files)
+            files = opts.files;
+        else
+            files = bulk_scan_files(opts.folders, conv);
+        end
     else
         conv = bulk_conventions_ui(cf);
         if isempty(conv); fprintf('Cancelled at conventions.\n'); out = []; return; end
@@ -305,6 +310,30 @@ function rows = load_perfile(neuralPath, mt, schema)
     rows = [];
     [d, b] = fileparts(neuralPath);
     pf = fullfile(d, [b '_vengmetrics.mat']);
+    rows = try_load_perfile(pf, mt, schema);
+    if ~isempty(rows); return; end
+
+    % Fallback: some stim_rec harvests were keyed to the *full* (stim+recovery)
+    % blankmotion file rather than the recovery-segment file (they still
+    % computed metrics from the recovery segment internally -- just cached
+    % under the full file's name+mtime). Check that alternate cache too.
+    if contains(b, '_recovery_blankmotion')
+        bAlt = strrep(b, '_recovery_blankmotion', '_blankmotion');
+        pfAlt = fullfile(d, [bAlt '_vengmetrics.mat']);
+        if exist(pfAlt,'file')
+            altNeural = fullfile(d, [bAlt fileparts_ext(neuralPath)]);
+            mtAlt = file_mtime(altNeural);
+            rows = try_load_perfile(pfAlt, mtAlt, schema);
+        end
+    end
+end
+
+function ext = fileparts_ext(p)
+    [~,~,ext] = fileparts(p);
+end
+
+function rows = try_load_perfile(pf, mt, schema)
+    rows = [];
     if ~exist(pf,'file'); return; end
     try
         S = load(pf);

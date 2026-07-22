@@ -1,0 +1,109 @@
+[scan] 96 file(s): 49 baseline, 47 recovery.
+  --- matched files ---
+    [recovery] f / E1000     E1000_FRE_E1000_stim_rec_1406_notched_v0.2.2_recovery_blankmotion
+    [recovery] j / E1000     E1000_JEL_E1000_stim_rec_1325_notched_v0.2.2_recovery_blankmotion
+    [recovery] l / E1000     E1000_lol_E1000_stim_rec_1251_notched_v0.2.2_recovery_blankmotion
+    [recovery] f / E100      E100_FRE_E100_stim_rec_1038_notched_v0.2.2_recovery_blankmotion
+    [recovery] j / E100      E100_jel_E100_stim_rec_1201_notched_v0.2.2_recovery_blankmotion
+    [recovery] l / E100      E100_lol_E100_stim_rec_1122_notched_v0.2.2_recovery_blankmotion
+    [baseline] f / E1000     E1000_FRE_E1000_bl_1356_notched_v0.2.2_blankmotion
+    [baseline] j / E1000     E1000_JEL_E1000_bl_1315_notched_v0.2.2_blankmotion
+    [baseline] l / E1000     E1000_lol_E1000_bl_1240_notched_v0.2.2_blankmotion
+    [baseline] f / E100      E100_FRE_E100_bl_1028_notched_v0.2.2_blankmotion
+    [baseline] j / E100      E100_jel_E100_bl_1151_notched_v0.2.2_blankmotion
+    [baseline] l / E100      E100_lol_E100_bl_1112_notched_v0.2.2_blankmotion
+    [recovery] j / M100E10   M100E10_JEL_CME2_stim_rec_2216_notched_v0.2.2_recovery_blankmotion
+    [recovery] l / M100E10   M100E10_LOL_CME2_stim_rec_2253_notched_v0.2.2_recovery_blankmotion
+    [recovery] o / M100E10   M100E10_ORE_CME2_stim_rec_2333_notched_v0.2.2_recovery_blankmotion
+    [recovery] j / M100      M100_JEL_MS2_stim_rec_1955_notched_v0.2.2_recovery_blankmotion
+    [recovery] l / M100      M100_LOL_MS2_stim_rec_2031_notched_v0.2.2_recovery_blankmotion
+    [recovery] o / M10E100   M10E100_ORE_CME_stim_rec_1050_notched_v0.2.2_recovery_blankmotion
+    [recovery] o / M10E10    M10E10_ORE_CME_stim_rec_1908_notched_v0.2.2_recovery_blankmotion
+    [recovery] o / M50E10    M50E10_ORE_CME_stim_rec_1309_notched_v0.2.2_recovery_blankmotion
+    [baseline] j / M100E10   M100E10_JEL_CME2_bl_2205_notched_v0.2.2_blankmotion
+    [baseline] l / M100E10   M100E10_LOL_CME2_bl_2243_notched_v0.2.2_blankmotion
+    [baseline] o / M100E10   M100E10_ORE_CME2_bl_2323_notched_v0.2.2_blankmotion
+    [baseline] j / M100      M100_JEL_MS2_bl_1945_notched_v0.2.2_blankmotion
+    [baseline] l / M100      M100_LOL_MS2_bl_2021_notched_v0.2.2_blankmotion
+    [baseline] o / M10E100   M10E100_ORE_CME_bl_1040_notched_v0.2.2_blankmotion
+    [baseline] o / M10E10    M10E10_ORE_CME_bl_1858_notched_v0.2.2_blankmotion
+    [baseline] o / M50E10    M50E10_ORE_CME_bl_1259_notched_v0.2.2_blankmotion
+    [recovery] j / M100E100  M100E100_JEL_CME_stim_rec_2332_notched_v0.2.2_recovery_blankmotion
+    [recovery] l / M100E100  M100E100_LOL_CME_stim_rec_0007_notched_v0.2.2_recovery_blankmotion
+    [recovery] o / M100E100  M100E100_ORE_CME_stim_rec_0050_notched_v0.2.2_recovery_blankmotion
+    [recovery] j / M10E1000  M10E1000_Jel_CME_stim_rec_1129_notched_v0.2.2_recovery_blankmotion
+    [recovery] l / M10E1000  M10E1000_LOL_CME_stim_rec_1212_notched_v0.2.2_recovery_blankmotion
+    [recovery] o / M10E1000  M10E1000_Ore_CME_stim_rec_1253_notched_v0.2.2_recovery_blankmotion
+    [recovery] j / M50E1000  M50E1000_JEL_CME_stim_rec_2209_notched_v0.2.2_recovery_blankmotion
+    [recovery] l / M50E1000  M50E1000_LOL_CME_stim_rec_2254_notched_v0.2.2_recovery_blankmotion
+    [recovery] o / M50E1000  M50E1000_Ore_CME_stim_rec_2131_notched_v0.2.2_recovery_blankmotion
+    [recovery] o / M50E100   M50E100_Ore_CME_stim_rec_1040_notched_v0.2.2_recovery_blankmotion
+    [baseline] j / M100E100  M100E100_JEL_CME_bl_2322_notched_v0.2.2_blankmotion
+    [baseline] l / M100E100  M100E100_LOL_CME_bl_2357_notched_v0.2.2_blankmotion
+    [baseline] o / M100E100  M100E100_ORE_CME_bl_0039_notched_v0.2.2_blankmotion
+    [baseline] j / M10E1000  M10E1000_Jel_CME_bl_1119_notched_v0.2.2_blankmotion
+    [baseline] l / M10E1000  M10E1000_LOL_CME_bl_1201_notched_v0.2.2_blankmotion
+    [baseline] o / M10E1000  M10E1000_Ore_CME_bl_1243_notched_v0.2.2_blankmotion
+    [baseline] j / M50E1000  M50E1000_JEL_CME_bl_2159_notched_v0.2.2_blankmotion
+    [baseline] l / M50E1000  M50E1000_LOL_CME_bl_2244_notched_v0.2.2_blankmotion
+    [baseline] o / M50E1000  M50E1000_Ore_CME_bl_2120_notched_v0.2.2_blankmotion
+    [baseline] o / M50E100   M50E100_Ore_CME_bl_1030_notched_v0.2.2_blankmotion
+    [recovery] j / M100E1000  M100E1000_JEL_CME_stim_rec_1238_notched_v0.2.2_recovery_blankmotion
+    [recovery] l / M100E1000  M100E1000_LOL_CME_stim_rec_1314_notched_v0.2.2_recovery_blankmotion
+    [recovery] o / M100E1000  M100E1000_ORE_CME_stim_rec_1157_notched_v0.2.2_recovery_blankmotion
+    [baseline] o / E1000     E1000_ORE_ES2_bl_1346_notched_v0.2.2_blankmotion
+    [baseline] j / M100E1000  M100E1000_JEL_CME_bl_1228_notched_v0.2.2_blankmotion
+    [baseline] l / M100E1000  M100E1000_LOL_CME_bl_1304_notched_v0.2.2_blankmotion
+    [baseline] o / M100E1000  M100E1000_ORE_CME_bl_1147_notched_v0.2.2_blankmotion
+    [recovery] o / M100      M100_ORE_M10_stim_rec_1306_notched_v0.2.2_recovery_blankmotion
+    [recovery] j / M10       M10_JEL_M10_stim_rec_1144_notched_v0.2.2_recovery_blankmotion
+    [recovery] l / M10       M10_Lol_M10_stim_rec_1222_notched_v0.2.2_recovery_blankmotion
+    [recovery] o / M10       M10_ORE_M10_stim_rec_1048_notched_v0.2.2_recovery_blankmotion
+    [recovery] j / M50       M50_Jel_M50_stim_rec_2133_notched_v0.2.2_recovery_blankmotion
+    [recovery] l / M50       M50_Lol_M50_stim_rec_2212_notched_v0.2.2_recovery_blankmotion
+    [recovery] o / M50       M50_ORE_M50_stim_rec_2045_notched_v0.2.2_recovery_blankmotion
+    [baseline] o / M100      M100_ORE_M10_bl_1256_notched_v0.2.2_blankmotion
+    [baseline] j / M10       M10_JEL_M10_bl_1133_notched_v0.2.2_blankmotion
+    [baseline] l / M10       M10_Lol_M10_bl_1212_notched_v0.2.2_blankmotion
+    [baseline] o / M10       M10_ORE_M10_bl_1038_notched_v0.2.2_blankmotion
+    [baseline] j / M50       M50_Jel_M50_bl_2123_notched_v0.2.2_blankmotion
+    [baseline] l / M50       M50_Lol_M50_bl_2202_notched_v0.2.2_blankmotion
+    [baseline] o / M50       M50_ORE_M50_bl_2035_notched_v0.2.2_blankmotion
+    [recovery] l / M50E100   M50E100_lol_CME1_stim_rec_2134_notched_v0.2.2_recovery_blankmotion
+    [recovery] l / M50E100   M50E100_lol_CME2_stim_rec_2206_notched_v0.2.2_recovery_blankmotion
+    [baseline] l / M50E100   M50E100_lol_CME1_bl_2124_notched_v0.2.2_blankmotion
+    [baseline] l / M50E100   M50E100_lol_CME2_bl_2156_notched_v0.2.2_blankmotion
+    [recovery] f / E10       E10_FRE_E10_stim_rec_0030_notched_v0.2.2_recovery_blankmotion
+    [recovery] j / E10       E10_Jel_E10_stim_rec_2305_notched_v0.2.2_recovery_blankmotion
+    [recovery] l / E10       E10_LOL_E10_stim_rec_2343_notched_v0.2.2_recovery_blankmotion
+    [recovery] f / M10E10    M10E10_FRE_M10E10_stim_rec_2001_notched_v0.2.2_recovery_blankmotion
+    [recovery] j / M10E10    M10E10_JEL_M10E10_stim_rec_1842_notched_v0.2.2_recovery_blankmotion
+    [recovery] l / M10E10    M10E10_LOL_M10E10_stim_rec_1920_notched_v0.2.2_recovery_blankmotion
+    [recovery] f / M50E10    M50E10_FRE_M50E10_stim_rec_2253_notched_v0.2.2_recovery_blankmotion
+    [recovery] j / M50E10    M50E10_JEL_M50E10_stim_rec_2134_notched_v0.2.2_recovery_blankmotion
+    [recovery] l / M50E10    M50E10_LOL_M50E10_stim_rec_2215_notched_v0.2.2_recovery_blankmotion
+    [recovery] j / M10E100   M10E100_JEL_CME_stim_rec_1338_notched_v0.2.2_recovery_blankmotion
+    [recovery] l / M10E100   M10E100_lol_CME_stim_rec_1417_notched_v0.2.2_recovery_blankmotion
+    [baseline] f / E10       E10_FRE_E10_bl_0020_notched_v0.2.2_blankmotion
+    [baseline] j / E10       E10_Jel_E10_bl_2255_notched_v0.2.2_blankmotion
+    [baseline] l / E10       E10_LOL_E10_bl_2333_notched_v0.2.2_blankmotion
+    [baseline] f / M10E10    M10E10_FRE_M10E10_bl_1951_notched_v0.2.2_blankmotion
+    [baseline] j / M10E10    M10E10_JEL_M10E10_bl_1832_notched_v0.2.2_blankmotion
+    [baseline] l / M10E10    M10E10_LOL_M10E10_bl_1909_notched_v0.2.2_blankmotion
+    [baseline] f / M50E10    M50E10_FRE_M50E10_bl_2243_notched_v0.2.2_blankmotion
+    [baseline] j / M50E10    M50E10_JEL_M50E10_bl_2124_notched_v0.2.2_blankmotion
+    [baseline] l / M50E10    M50E10_LOL_M50E10_bl_2205_notched_v0.2.2_blankmotion
+    [baseline] j / M10E100   M10E100_JEL_CME_bl_1328_notched_v0.2.2_blankmotion
+    [baseline] j / M10E100   M10E100_JEL_M10E100_bl_1310_notched_v0.2.2_blankmotion
+    [baseline] l / M10E100   M10E100_lol_CME_bl_1407_notched_v0.2.2_blankmotion
+  --- pairing check ---
+    o|E1000 : MISSING recovery -> will be dropped at compile
+[manifest-scoped] 90 of 96 scanned files kept (manifest has 90 paths); 6 scanned-but-not-in-manifest dropped.
+[cache] file: /Volumes/PortableSSD/processing_new/bulk_cache.mat
+[cache] 0 entr(y/ies) loaded.
+[bulk] 90 cached (skipped), 0 to process.
+[compile] 90 normalized rows (one per recovery trial x channel; repeats kept separate).
+[bulk] groups not set. Render later, e.g.:
+   bulk_plot_boxviolin(out.norm, groups, 'rate', 'RVN');
+rawRows: 180 rows. Channels: LVN, RVN. Conditions: E10, E100, E1000, M10, M100, M100E10, M100E100, M100E1000, M10E10, M10E100, M10E1000, M50, M50E10, M50E100, M50E1000. Animals: f, j, l, o
+Saved to real_rawRows.mat

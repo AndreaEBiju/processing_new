@@ -172,6 +172,7 @@ function [thetaFull, resnorm2] = fit_layer12_stage2_interaction(rawRows, channel
         'f_lo',f_lo, 'f_hi',f_hi, 'rho1',rho1, 'kappa1',kappa1, ...
         'u_M_half',bt(3), 'f_max_c2',bt(4), 'w_1',bt(5), 'w_2',bt(6), ...
         'resnorm',bestResnorm, 'nTrials',numel(sel), 'nRestartsConverged',nnz(near));
+    thetaFull.allRestarts = results;   % diagnostic: full per-restart theta/resnorm/exitflag table
 
     % ---- f_max_c2 distinctness check (explicit report, not just a bound) --
     sep = candidate.f_max_c - thetaFull.f_max_c2;

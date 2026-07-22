@@ -1,0 +1,403 @@
+Loaded 180 real rawRows.
+
+================ PER-CHANNEL (RVN/LVN) FIRST PASS ================
+==== Step 1: unit tests (test_layer12_equations) ====
+Running test_layer12_equations
+..........
+Done test_layer12_equations
+__________
+
+All 10 unit tests passed.
+
+==== Step 8 (computed early -- needed by Step 7 diagnostics): bulk_mixed_models cross-check ====
+[compile] 90 normalized rows (one per recovery trial x channel; repeats kept separate).
+
+================ M x E interaction (animal random) ================
+Nerve firing rate (RVN) [LME, n=45, 4 animals]  interaction chi2 = 13.8, df=9, p=0.131
+Nerve firing rate (LVN) [LME, n=45, 4 animals]  interaction chi2 = 11.3, df=9, p=0.255
+Vpp (RVN)            [LME, n=45, 4 animals]  interaction chi2 = 16.4, df=9, p=0.0592
+Vpp (LVN)            [LME, n=45, 4 animals]  interaction chi2 = 5.34, df=9, p=0.804
+FWHM (RVN)           [LME, n=45, 4 animals]  interaction chi2 = 24.6, df=9, p=0.00345
+FWHM (LVN)           [LME, n=45, 4 animals]  interaction chi2 = 12.8, df=9, p=0.172
+CV2 (RVN)            [LME, n=45, 4 animals]  interaction chi2 = 33.8, df=9, p=9.82e-05
+CV2 (LVN)            [LME, n=45, 4 animals]  interaction chi2 = 18.6, df=9, p=0.029
+Total firing rate (LVN+RVN) [LME, n=45, 4 animals]  interaction chi2 = 12.2, df=9, p=0.201
+
+Significant synergy cells (FDR<0.05):
+   FWHM (RVN)           M100 x E10 : +65.2%  (p=0.000351, pFDR=0.00316)
+   CV2 (RVN)            M50 x E100 : +38.1%  (p=0.000161, pFDR=0.00145)
+
+[saved] /Volumes/PortableSSD/processing_new/layer12_real_figs/mixedmodel_interaction_summary.csv
+[saved] /Volumes/PortableSSD/processing_new/layer12_real_figs/mixedmodel_synergy_cells.csv
+
+==== Step 2: Stage 1 (pooled E-alone fit, both channels, both candidates) ====
+[stage1] RVN: 9 E-alone trials (u_E levels: [10 100 1000])
+[stage1] LVN: 9 E-alone trials (u_E levels: [10 100 1000])
+[stage1-pooled] 20/20 restarts converged (exitflag>0).
+[stage1-pooled] best resnorm=4876.04, exitflag=3
+[stage1-pooled] theta=[u_half=6111, f_max_c=29.62, W_c_RVN=5484, W_c_LVN=6080]
+[stage1-pooled] spread among 20 near-best restarts:
+    u_half     [29.62, 6111]
+    f_max_c    [29.62, 6111]
+    W_c_RVN    [26.58, 5484]
+    W_c_LVN    [29.46, 6080]
+Stage 1 raw values (NOT individually meaningful -- exact swap symmetry, see model_fitting_plan.md L12):
+  u_half = 6111.290, f_max_c = 29.617, W_c_RVN = 5483.786, W_c_LVN = 6079.821
+Stage 1 IDENTIFIABLE invariants (these ARE meaningful, and are the
+SAME for both candidates below -- that is the point of L12):
+  sqrt(u_half*f_max_c) = 425.436
+  W_c_LVN/W_c_RVN = 1.109
+[stage1-independent] RVN: theta=[W_c=7.466e+08, u_half=4.866e+08, f_max_c=14.6], resnorm=815.058
+[stage1-independent] LVN: theta=[W_c=48.19, u_half=87.29, f_max_c=1192], resnorm=4008.63
+
+[L12 VALIDATION] Pooled-vs-independent Stage 1 residual comparison:
+    pooled total resnorm     = 4876.04  (u_half=6111, f_max_c=29.62 shared)
+    independent total resnorm = 4823.68  (RVN: u_half=4.866e+08,f_max_c=14.6 | LVN: u_half=87.29,f_max_c=1192)
+    pooled vs independent     = +1.1%
+[L12 VALIDATION] pooling did not increase residual sharply -- supports the shared-physiology assumption.
+
+==== Step 3: Stage 2, both candidates x both channels ====
+[stage2-RVN-raw] 27 combined-condition trials across 9 distinct M x E cells:
+    M10 x E10 : 3 trial(s)
+    M10 x E100 : 3 trial(s)
+    M10 x E1000 : 3 trial(s)
+    M50 x E10 : 3 trial(s)
+    M50 x E100 : 3 trial(s)
+    M50 x E1000 : 3 trial(s)
+    M100 x E10 : 3 trial(s)
+    M100 x E100 : 3 trial(s)
+    M100 x E1000 : 3 trial(s)
+[stage2-RVN-raw] 20/20 restarts converged (exitflag>0).
+[stage2-RVN-raw] best resnorm=4710.12, exitflag=1
+[stage2-RVN-raw] IDENTIFIABLE (L16): rho1=sqrt(f_lo*f_hi)=491.6, kappa1=0.5*ln(f_hi/f_lo)=0.9172 (sign-constrained convention)
+[stage2-RVN-raw] DERIVED display values: f_lo=196.4, f_hi=1230 -- theta=[u_M_half=61.47, f_max_c2=15.75, w_1=2.22e-14, w_2=2.269e-14]
+[stage2-RVN-raw] spread among 20 near-best restarts:
+    rho1       [4.184e-14, 2.058e+05]
+    kappa1     [1.02e-13, 2.773]
+    u_M_half   [1.147, 2.061e+04]
+    f_max_c2   [2.22e-14, 26.43]
+    w_1        [2.22e-14, 185.4]
+    w_2        [2.22e-14, 882.8]
+[stage2-RVN-raw] f_max_c2 distinctness: f_max_c=29.62, f_max_c2=15.75, separation=13.87 (true)
+[RVN-raw] Check 1 (M50xE100 > M100xE100): false (20.173 vs 20.173)
+[RVN-raw] Check 2 (M100xE10 > M50xE10):   false (6.697 vs 6.697)
+[stage2-RVN-raw] *** PATTERN CHECK FAILED *** -- the two-term structure's one required job (moving optimum) was NOT reproduced by this fit. Reporting prominently, NOT retrying with different starting points to force a pass.
+[stage2-LVN-raw] 27 combined-condition trials across 9 distinct M x E cells:
+    M10 x E10 : 3 trial(s)
+    M10 x E100 : 3 trial(s)
+    M10 x E1000 : 3 trial(s)
+    M50 x E10 : 3 trial(s)
+    M50 x E100 : 3 trial(s)
+    M50 x E1000 : 3 trial(s)
+    M100 x E10 : 3 trial(s)
+    M100 x E100 : 3 trial(s)
+    M100 x E1000 : 3 trial(s)
+[stage2-LVN-raw] 20/20 restarts converged (exitflag>0).
+[stage2-LVN-raw] best resnorm=9601.86, exitflag=1
+[stage2-LVN-raw] IDENTIFIABLE (L16): rho1=sqrt(f_lo*f_hi)=2.84, kappa1=0.5*ln(f_hi/f_lo)=0.8382 (sign-constrained convention)
+[stage2-LVN-raw] DERIVED display values: f_lo=1.228, f_hi=6.565 -- theta=[u_M_half=941.8, f_max_c2=19.9, w_1=2.495e-14, w_2=2.22e-14]
+[stage2-LVN-raw] spread among 20 near-best restarts:
+    rho1       [2.227e-14, 6842]
+    kappa1     [4.549e-09, 2.674]
+    u_M_half   [24.69, 4.674e+04]
+    f_max_c2   [2.22e-14, 19.9]
+    w_1        [2.22e-14, 188.2]
+    w_2        [2.22e-14, 845.2]
+[stage2-LVN-raw] f_max_c2 distinctness: f_max_c=29.62, f_max_c2=19.9, separation=9.72 (true)
+[Warning: [LVN-raw] u_M_half = 941.8 is > 5x max tested u_M (100) -- L17
+asymptotic ridge risk. u_M_half and w_2 individually unreliable in this regime;
+report kappa2 = w_2/u_M_half = 2.358e-17 as the more robust quantity alongside
+(not instead of) the raw values.] 
+[> In fit_layer12_stage2_interaction (line 200)
+In run_layer12_first_pass (line 90)
+In run_layer12_real_data (line 13)] 
+[LVN-raw] Check 1 (M50xE100 > M100xE100): false (22.366 vs 22.366)
+[LVN-raw] Check 2 (M100xE10 > M50xE10):   false (7.425 vs 7.425)
+[stage2-LVN-raw] *** PATTERN CHECK FAILED *** -- the two-term structure's one required job (moving optimum) was NOT reproduced by this fit. Reporting prominently, NOT retrying with different starting points to force a pass.
+[stage2-RVN-swapped] 27 combined-condition trials across 9 distinct M x E cells:
+    M10 x E10 : 3 trial(s)
+    M10 x E100 : 3 trial(s)
+    M10 x E1000 : 3 trial(s)
+    M50 x E10 : 3 trial(s)
+    M50 x E100 : 3 trial(s)
+    M50 x E1000 : 3 trial(s)
+    M100 x E10 : 3 trial(s)
+    M100 x E100 : 3 trial(s)
+    M100 x E1000 : 3 trial(s)
+[stage2-RVN-swapped] 20/20 restarts converged (exitflag>0).
+[stage2-RVN-swapped] best resnorm=4710.12, exitflag=1
+[stage2-RVN-swapped] IDENTIFIABLE (L16): rho1=sqrt(f_lo*f_hi)=1.015e+05, kappa1=0.5*ln(f_hi/f_lo)=0.0007155 (sign-constrained convention)
+[stage2-RVN-swapped] DERIVED display values: f_lo=1.014e+05, f_hi=1.016e+05 -- theta=[u_M_half=3106, f_max_c2=2181, w_1=2.22e-14, w_2=2.22e-14]
+[stage2-RVN-swapped] spread among 20 near-best restarts:
+    rho1       [7.911e-10, 4.777e+05]
+    kappa1     [9.307e-13, 3.522]
+    u_M_half   [53.77, 6.316e+05]
+    f_max_c2   [1445, 6064]
+    w_1        [2.22e-14, 0.001145]
+    w_2        [2.22e-14, 2.869e-06]
+[stage2-RVN-swapped] f_max_c2 distinctness: f_max_c=6111, f_max_c2=2181, separation=3930 (true)
+[Warning: [RVN-swapped] u_M_half = 3106.2 is > 5x max tested u_M (100) -- L17
+asymptotic ridge risk. u_M_half and w_2 individually unreliable in this regime;
+report kappa2 = w_2/u_M_half = 7.148e-18 as the more robust quantity alongside
+(not instead of) the raw values.] 
+[> In fit_layer12_stage2_interaction (line 200)
+In run_layer12_first_pass (line 90)
+In run_layer12_real_data (line 13)] 
+[RVN-swapped] Check 1 (M50xE100 > M100xE100): false (20.173 vs 20.173)
+[RVN-swapped] Check 2 (M100xE10 > M50xE10):   false (6.697 vs 6.697)
+[stage2-RVN-swapped] *** PATTERN CHECK FAILED *** -- the two-term structure's one required job (moving optimum) was NOT reproduced by this fit. Reporting prominently, NOT retrying with different starting points to force a pass.
+[stage2-LVN-swapped] 27 combined-condition trials across 9 distinct M x E cells:
+    M10 x E10 : 3 trial(s)
+    M10 x E100 : 3 trial(s)
+    M10 x E1000 : 3 trial(s)
+    M50 x E10 : 3 trial(s)
+    M50 x E100 : 3 trial(s)
+    M50 x E1000 : 3 trial(s)
+    M100 x E10 : 3 trial(s)
+    M100 x E100 : 3 trial(s)
+    M100 x E1000 : 3 trial(s)
+[stage2-LVN-swapped] 20/20 restarts converged (exitflag>0).
+[stage2-LVN-swapped] best resnorm=9601.86, exitflag=1
+[stage2-LVN-swapped] IDENTIFIABLE (L16): rho1=sqrt(f_lo*f_hi)=4.808e-14, kappa1=0.5*ln(f_hi/f_lo)=0.00226 (sign-constrained convention)
+[stage2-LVN-swapped] DERIVED display values: f_lo=4.798e-14, f_hi=4.819e-14 -- theta=[u_M_half=1.404e+06, f_max_c2=0.001058, w_1=265.3, w_2=0.008955]
+[stage2-LVN-swapped] spread among 20 near-best restarts:
+    rho1       [3.462e-14, 1.083e+06]
+    kappa1     [1.184e-09, 1.783]
+    u_M_half   [53.19, 1.404e+06]
+    f_max_c2   [0.000884, 6023]
+    w_1        [2.22e-14, 265.3]
+    w_2        [2.22e-14, 0.008955]
+[stage2-LVN-swapped] f_max_c2 distinctness: f_max_c=6111, f_max_c2=0.001058, separation=6111 (true)
+[Warning: [LVN-swapped] u_M_half = 1404133.6 is > 5x max tested u_M (100) -- L17
+asymptotic ridge risk. u_M_half and w_2 individually unreliable in this regime;
+report kappa2 = w_2/u_M_half = 6.378e-09 as the more robust quantity alongside
+(not instead of) the raw values.] 
+[> In fit_layer12_stage2_interaction (line 200)
+In run_layer12_first_pass (line 90)
+In run_layer12_real_data (line 13)] 
+[LVN-swapped] Check 1 (M50xE100 > M100xE100): false (22.366 vs 22.366)
+[LVN-swapped] Check 2 (M100xE10 > M50xE10):   true (7.425 vs 7.425)
+[stage2-LVN-swapped] *** PATTERN CHECK FAILED *** -- the two-term structure's one required job (moving optimum) was NOT reproduced by this fit. Reporting prominently, NOT retrying with different starting points to force a pass.
+
+==== Step 4: basin selection (L15) ====
+  candidate 1 (raw) total resnorm = 14312
+  candidate 2 (swapped) total resnorm = 14312
+  SELECTED: candidate 2 (swapped), margin = 0.0% (threshold 10%)
+[Warning: Stage 1 basin selection margin only 0.0% (< 10% threshold) --
+AMBIGUOUS, review manually before trusting auto-selected results.] 
+[> In run_layer12_first_pass (line 123)
+In run_layer12_real_data (line 13)] 
+
+==== Step 5: per-channel basin agreement check ====
+  RVN  prefers candidate 1 (raw)
+  LVN  prefers candidate 2 (swapped)
+[Warning: Channels DISAGREE on which Stage 1 candidate is correct -- this is
+evidence AGAINST the L12 pooling assumption (shared u_half/f_max_c across
+channels), not just a selection nuance. Reporting prominently; NOT silently
+defaulting to the total's answer.] 
+[> In run_layer12_first_pass (line 144)
+In run_layer12_real_data (line 13)] 
+
+==== Step 7: diagnostics (winning candidate only) ====
+[diagnostics-RVN] Check1 (M50xE100>M100xE100): FAIL   Check2 (M100xE10>M50xE10): FAIL
+[diagnostics-LVN] Check1 (M50xE100>M100xE100): FAIL   Check2 (M100xE10>M50xE10): PASS
+
+==== Step 9: fitted parameter summary ====
+-- shared (u_half, f_max_c; pooled across RVN+LVN, SELECTED candidate) --
+    u_half    f_max_c    selectedCandidate    selectionMarginPct    basinAmbiguous    channelDisagreement    resnormPooled    resnormIndependentTotal    pooledVsIndependentPctChange    stage1Error
+    ______    _______    _________________    __________________    ______________    ___________________    _____________    _______________________    ____________________________    ___________
+
+    29.617    6111.3        {'swapped'}           3.7874e-12            true                 true                4876                 4823.7                        1.0854               {0×0 char} 
+
+-- per-channel (W_c + Stage 2 interaction params, SELECTED candidate) --
+    channel     W_c         f_lo          f_hi        u_M_half     f_max_c2        w_1           w_2        check1_M50E100_gt_M100E100    check2_M100E10_gt_M50E10     fitError 
+    _______    ______    __________    __________    __________    _________    __________    __________    __________________________    ________________________    __________
+
+    {'RVN'}    26.576    1.0143e+05    1.0158e+05        3106.2       2181.4    2.2204e-14    2.2205e-14              false                        false              {0×0 char}
+    {'LVN'}    29.464    4.7975e-14    4.8192e-14    1.4041e+06    0.0010581        265.26     0.0089553              false                        true               {0×0 char}
+
+-- audit trail (both candidates x both channels, resnorm2) --
+    candidateIdx    candidateLabel    channel    resnorm2    selected
+    ____________    ______________    _______    ________    ________
+
+         1           {'raw'    }      {'RVN'}     4710.1      false  
+         1           {'raw'    }      {'LVN'}     9601.9      false  
+         2           {'swapped'}      {'RVN'}     4710.1      true   
+         2           {'swapped'}      {'LVN'}     9601.9      true   
+
+[Warning: Figure is saved in
+/Volumes/PortableSSD/processing_new/layer12_real_figs/layer12_first_pass_results.mat,
+which might result in a large file size or unexpected behavior when loading the
+figure. To reduce file size, avoid saving graphics objects by specifying which
+data variables to save. To save a graphics figure with additional options for
+loading, use the savefig function.] 
+[> In run_layer12_first_pass (line 262)
+In run_layer12_real_data (line 13)] 
+[saved] /Volumes/PortableSSD/processing_new/layer12_real_figs/layer12_first_pass_summary_shared.csv
+[saved] /Volumes/PortableSSD/processing_new/layer12_real_figs/layer12_first_pass_summary_perchannel.csv
+[saved] /Volumes/PortableSSD/processing_new/layer12_real_figs/layer12_first_pass_basin_audit.csv
+[saved] /Volumes/PortableSSD/processing_new/layer12_real_figs/layer12_first_pass_results.mat
+
+================ Section 5 pattern check (BOTH channels, SELECTED candidate) ================
+  RVN  : Check1 (M50xE100>M100xE100) = FAIL   Check2 (M100xE10>M50xE10) = FAIL
+  LVN  : Check1 (M50xE100>M100xE100) = FAIL   Check2 (M100xE10>M50xE10) = PASS
+===============================================================================================
+
+================ L12 validation: pooled-vs-independent Stage 1 ================
+  pooled total resnorm      = 4876.04
+  independent total resnorm = 4823.68
+  pooled vs independent     = +1.1%
+  pooling did not increase residual sharply -- supports the shared-physiology assumption.
+=================================================================================
+
+================ L13/L15: basin selection outcome ================
+  Selected candidate 2 (swapped); rejected candidate 1 (raw)
+  Selection margin: 0.0% (threshold 10%) -- AMBIGUOUS, review manually
+  Per-channel agreement: CHANNELS DISAGREE -- pooling assumption in question
+  Identifiable invariants (same for both candidates, L12): sqrt(u_half*f_max_c)=425.436, W_c_LVN/W_c_RVN=1.109
+====================================================================
+
+================ L17: (u_M_half, w_2) asymptotic ridge check ================
+  RVN  : FLAGGED -- u_M_half=3106.2, w_2=2.22e-14 individually unreliable (data-coverage limit, L4/L17). kappa2=w_2/u_M_half=7.148e-18 is the more robust quantity.
+  LVN  : FLAGGED -- u_M_half=1404133.6, w_2=0.008955 individually unreliable (data-coverage limit, L4/L17). kappa2=w_2/u_M_half=6.378e-09 is the more robust quantity.
+===============================================================================
+
+================ TOTAL (RVN+LVN) FIRST PASS ================
+==== Step 1: unit tests (test_layer12_equations) ====
+Running test_layer12_equations
+..........
+Done test_layer12_equations
+__________
+
+All 10 unit tests passed.
+
+[total] 90 TOTAL rows built (paired RVN+LVN sums, per bulk_mixed_models.m's build_total_rate_table grouping convention).
+
+==== bulk_mixed_models cross-check (for "Total firing rate (LVN+RVN)" synergy) ====
+[compile] 90 normalized rows (one per recovery trial x channel; repeats kept separate).
+
+================ M x E interaction (animal random) ================
+Nerve firing rate (RVN) [LME, n=45, 4 animals]  interaction chi2 = 13.8, df=9, p=0.131
+Nerve firing rate (LVN) [LME, n=45, 4 animals]  interaction chi2 = 11.3, df=9, p=0.255
+Vpp (RVN)            [LME, n=45, 4 animals]  interaction chi2 = 16.4, df=9, p=0.0592
+Vpp (LVN)            [LME, n=45, 4 animals]  interaction chi2 = 5.34, df=9, p=0.804
+FWHM (RVN)           [LME, n=45, 4 animals]  interaction chi2 = 24.6, df=9, p=0.00345
+FWHM (LVN)           [LME, n=45, 4 animals]  interaction chi2 = 12.8, df=9, p=0.172
+CV2 (RVN)            [LME, n=45, 4 animals]  interaction chi2 = 33.8, df=9, p=9.82e-05
+CV2 (LVN)            [LME, n=45, 4 animals]  interaction chi2 = 18.6, df=9, p=0.029
+Total firing rate (LVN+RVN) [LME, n=45, 4 animals]  interaction chi2 = 12.2, df=9, p=0.201
+
+Significant synergy cells (FDR<0.05):
+   FWHM (RVN)           M100 x E10 : +65.2%  (p=0.000351, pFDR=0.00316)
+   CV2 (RVN)            M50 x E100 : +38.1%  (p=0.000161, pFDR=0.00145)
+
+[saved] /Volumes/PortableSSD/processing_new/layer12_real_figs/mixedmodel_interaction_summary.csv
+[saved] /Volumes/PortableSSD/processing_new/layer12_real_figs/mixedmodel_synergy_cells.csv
+
+==== Stage 1: TOTAL E-alone fit (3 params, single group) ====
+[stage1-TOTAL] 9 E-alone trials (u_E levels: [10 100 1000])
+[stage1-TOTAL] 20/20 restarts converged. best resnorm=8392.09, theta=[W_c_TOTAL=55.16, u_half=28.26, f_max_c=6868]
+[stage1-TOTAL] raw u_half/f_max_c/W_c_TOTAL NOT individually meaningful here (exact swap symmetry, model_fitting_plan.md L12 -- no second channel to pool against). Identifiable invariant sqrt(u_half*f_max_c) = 440.6.
+
+==== Stage 2: TOTAL interaction fit, both candidates ====
+[stage2-TOTAL-raw] 27 combined-condition trials across 9 distinct M x E cells:
+    M10 x E10 : 3 trial(s)
+    M10 x E100 : 3 trial(s)
+    M10 x E1000 : 3 trial(s)
+    M50 x E10 : 3 trial(s)
+    M50 x E100 : 3 trial(s)
+    M50 x E1000 : 3 trial(s)
+    M100 x E10 : 3 trial(s)
+    M100 x E100 : 3 trial(s)
+    M100 x E1000 : 3 trial(s)
+[stage2-TOTAL-raw] 20/20 restarts converged (exitflag>0).
+[stage2-TOTAL-raw] best resnorm=26537.2, exitflag=1
+[stage2-TOTAL-raw] IDENTIFIABLE (L16): rho1=sqrt(f_lo*f_hi)=2.862e+04, kappa1=0.5*ln(f_hi/f_lo)=2.644e-06 (sign-constrained convention)
+[stage2-TOTAL-raw] DERIVED display values: f_lo=2.862e+04, f_hi=2.862e+04 -- theta=[u_M_half=6951, f_max_c2=1833, w_1=2.22e-14, w_2=3.009e-14]
+[stage2-TOTAL-raw] spread among 20 near-best restarts:
+    rho1       [2.224e-14, 1.124e+06]
+    kappa1     [4.476e-11, 2.288]
+    u_M_half   [25.63, 1.405e+06]
+    f_max_c2   [368.7, 6341]
+    w_1        [2.22e-14, 185]
+    w_2        [2.22e-14, 3.832e-08]
+[stage2-TOTAL-raw] f_max_c2 distinctness: f_max_c=6868, f_max_c2=1833, separation=5035 (true)
+[Warning: [TOTAL-raw] u_M_half = 6951.2 is > 5x max tested u_M (100) -- L17
+asymptotic ridge risk. u_M_half and w_2 individually unreliable in this regime;
+report kappa2 = w_2/u_M_half = 4.329e-18 as the more robust quantity alongside
+(not instead of) the raw values.] 
+[> In fit_layer12_stage2_interaction (line 200)
+In run_layer12_total_channel (line 93)
+In run_layer12_real_data (line 16)] 
+[TOTAL-raw] Check 1 (M50xE100 > M100xE100): false (42.390 vs 42.390)
+[TOTAL-raw] Check 2 (M100xE10 > M50xE10):   false (14.396 vs 14.396)
+[stage2-TOTAL-raw] *** PATTERN CHECK FAILED *** -- the two-term structure's one required job (moving optimum) was NOT reproduced by this fit. Reporting prominently, NOT retrying with different starting points to force a pass.
+[stage2-TOTAL-swapped] 27 combined-condition trials across 9 distinct M x E cells:
+    M10 x E10 : 3 trial(s)
+    M10 x E100 : 3 trial(s)
+    M10 x E1000 : 3 trial(s)
+    M50 x E10 : 3 trial(s)
+    M50 x E100 : 3 trial(s)
+    M50 x E1000 : 3 trial(s)
+    M100 x E10 : 3 trial(s)
+    M100 x E100 : 3 trial(s)
+    M100 x E1000 : 3 trial(s)
+[stage2-TOTAL-swapped] 20/20 restarts converged (exitflag>0).
+[stage2-TOTAL-swapped] best resnorm=26537.2, exitflag=1
+[stage2-TOTAL-swapped] IDENTIFIABLE (L16): rho1=sqrt(f_lo*f_hi)=15.79, kappa1=0.5*ln(f_hi/f_lo)=4.375e-06 (sign-constrained convention)
+[stage2-TOTAL-swapped] DERIVED display values: f_lo=15.79, f_hi=15.79 -- theta=[u_M_half=2.049e+04, f_max_c2=2.221e-14, w_1=2.22e-14, w_2=61.57]
+[stage2-TOTAL-swapped] spread among 20 near-best restarts:
+    rho1       [5.977e-13, 3488]
+    kappa1     [3.203e-14, 2.835]
+    u_M_half   [0.1025, 4.791e+04]
+    f_max_c2   [2.22e-14, 15.38]
+    w_1        [2.22e-14, 540]
+    w_2        [2.22e-14, 816]
+[stage2-TOTAL-swapped] f_max_c2 distinctness: f_max_c=28.26, f_max_c2=2.221e-14, separation=28.26 (true)
+[Warning: [TOTAL-swapped] u_M_half = 20491.4 is > 5x max tested u_M (100) -- L17
+asymptotic ridge risk. u_M_half and w_2 individually unreliable in this regime;
+report kappa2 = w_2/u_M_half = 0.003005 as the more robust quantity alongside
+(not instead of) the raw values.] 
+[> In fit_layer12_stage2_interaction (line 200)
+In run_layer12_total_channel (line 93)
+In run_layer12_real_data (line 16)] 
+[TOTAL-swapped] Check 1 (M50xE100 > M100xE100): false (42.390 vs 42.390)
+[TOTAL-swapped] Check 2 (M100xE10 > M50xE10):   false (14.396 vs 14.396)
+[stage2-TOTAL-swapped] *** PATTERN CHECK FAILED *** -- the two-term structure's one required job (moving optimum) was NOT reproduced by this fit. Reporting prominently, NOT retrying with different starting points to force a pass.
+
+==== Basin selection (L15, TOTAL) ====
+  candidate 1 (raw)     resnorm2 = 26537.2
+  candidate 2 (swapped) resnorm2 = 26537.2
+  SELECTED: candidate 1 (raw), margin = 0.0% (threshold 10%)
+[Warning: Basin selection margin only 0.0% (< 10% threshold) -- AMBIGUOUS,
+review manually (expected here more often than the per-channel driver -- no
+second channel to help resolve it).] 
+[> In run_layer12_total_channel (line 118)
+In run_layer12_real_data (line 16)] 
+
+[diagnostics-TOTAL] Check1 (M50xE100>M100xE100): FAIL   Check2 (M100xE10>M50xE10): FAIL
+==== Fitted parameter summary (TOTAL) ====
+     W_c      u_half    f_max_c    f_lo     f_hi     u_M_half    f_max_c2       w_1           w_2        check1_M50E100_gt_M100E100    check2_M100E10_gt_M50E10
+    ______    ______    _______    _____    _____    ________    ________    __________    __________    __________________________    ________________________
+
+    55.162    28.263    6867.6     28623    28624     6951.2      1832.8     2.2204e-14    3.0088e-14              false                        false          
+
+[saved] /Volumes/PortableSSD/processing_new/layer12_real_figs/layer12_total_channel_summary.csv
+[saved] /Volumes/PortableSSD/processing_new/layer12_real_figs/layer12_total_channel_results.mat
+
+================ TOTAL pattern check ================
+  Check1 (M50xE100>M100xE100) = FAIL   Check2 (M100xE10>M50xE10) = FAIL
+=======================================================
+
+================ L17: (u_M_half, w_2) asymptotic ridge check ================
+  TOTAL : FLAGGED -- u_M_half=6951.2, w_2=3.009e-14 individually unreliable (data-coverage limit, L4/L17). kappa2=w_2/u_M_half=4.329e-18 is the more robust quantity.
+===============================================================================
+[Warning: Figure is saved in
+/Volumes/PortableSSD/processing_new/real_layer12_results.mat, which might
+result in a large file size or unexpected behavior when loading the figure. To
+reduce file size, avoid saving graphics objects by specifying which data
+variables to save. To save a graphics figure with additional options for
+loading, use the savefig function.] 
+[> In run_layer12_real_data (line 18)] 
+
+Saved results to real_layer12_results.mat
