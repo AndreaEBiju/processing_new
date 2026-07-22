@@ -340,16 +340,20 @@ function Tsys = build_dfa_tables()
             'loadAllMetricsCached returned %d row(s) but state.files has %d -- check gemsplots_metrics_cache.mat for a stale/mismatched cache.', ...
             nF, numel(state.files));
     end
-    isBase = strcmpi(state.phase,'baseline'); isRec = strcmpi(state.phase,'recovery');
+    % Force consistent row orientation -- see the matching comment in
+    % build_systemic_tables for why this matters (implicit-expansion
+    % broadcast bug, same root cause as the dfaGapAware.m fitRange fix).
+    animalRow = state.animal(:)'; condRow = state.condition(:)'; phaseRow = state.phase(:)';
+    isBase = strcmpi(phaseRow,'baseline'); isRec = strcmpi(phaseRow,'recovery');
     Tsys = struct('label',{},'T',{});
     nSkippedOOB = 0;
     for k = 1:nM
         y=[]; an={}; Mv=[]; Ev=[];
-        for r = find(isRec(:))'
-            a = state.animal{r}; c = state.condition{r};
+        for r = find(isRec)
+            a = animalRow{r}; c = condRow{r};
             % pair baseline<->recovery by (animal,condition), same convention as
             % build_systemic_tables / compute_norm
-            cand = find(isBase(:)' & strcmpi(state.animal,a) & strcmpi(state.condition,c));
+            cand = find(isBase & strcmpi(animalRow,a) & strcmpi(condRow,c));
             if isempty(cand); continue; end
             if r > nF || cand(1) > nF
                 nSkippedOOB = nSkippedOOB + 1;
@@ -457,16 +461,23 @@ function Tsys = build_systemic_tables()
             if ~isempty(sObj) && isfield(sObj,'y') && ~isempty(sObj.y); fmean(i,k)=mean(sObj.y,'omitnan'); end
         end
     end
-    isBase = strcmpi(state.phase,'baseline'); isRec = strcmpi(state.phase,'recovery');
+    % Force consistent row orientation on every array participating in the
+    % isBase/isRec/strcmpi '&' chains below -- state.animal/condition can
+    % come back from buildFileQueue as column vectors, and (1xN) & (Nx1)
+    % silently broadcasts (implicit expansion) into an NxN matrix instead
+    % of an elementwise Nx1 vector, so find() on it returns linear indices
+    % far beyond N (the root cause of the earlier out-of-range crash).
+    animalRow = state.animal(:)'; condRow = state.condition(:)'; phaseRow = state.phase(:)';
+    isBase = strcmpi(phaseRow,'baseline'); isRec = strcmpi(phaseRow,'recovery');
     Tsys = struct('label',{},'T',{});
     nSkippedOOB = 0;
     for k = 1:nM
         y=[]; an={}; Mv=[]; Ev=[];
-        for r = find(isRec(:))'
-            a = state.animal{r}; c = state.condition{r};
+        for r = find(isRec)
+            a = animalRow{r}; c = condRow{r};
             % pair baseline<->recovery by (animal,condition), same convention as
             % compute_norm in plotSynergyHeatmaps / bulk_hrv_heatmaps
-            cand = find(isBase(:)' & strcmpi(state.animal,a) & strcmpi(state.condition,c));
+            cand = find(isBase & strcmpi(animalRow,a) & strcmpi(condRow,c));
             if isempty(cand); continue; end
             if r > nF || cand(1) > nF
                 nSkippedOOB = nSkippedOOB + 1;
