@@ -327,6 +327,8 @@ function Tsys = build_dfa_tables()
 % dfa_alpha1/alpha2/alphaFull have no windowed series to average -- each is
 % already a single whole-trial fit, so no series-mean step is needed here.
     state = buildFileQueue(fullfile(pwd,'gemsplots_queue.mat'));
+    fprintf('[build_dfa_tables] state sizes: files=%d animal=%d condition=%d phase=%d\n', ...
+        numel(state.files), numel(state.animal), numel(state.condition), numel(state.phase));
     assert(~isempty(state.files), 'no files queued for DFA metrics');
     specs = dfa_specs();
     metricsCacheFile = fullfile(pwd,'gemsplots_metrics_cache.mat');
@@ -437,6 +439,8 @@ end
 % ======================================================================
 function Tsys = build_systemic_tables()
     state = buildFileQueue(fullfile(pwd,'gemsplots_queue.mat'));
+    fprintf('[build_systemic_tables] state sizes: files=%d animal=%d condition=%d phase=%d\n', ...
+        numel(state.files), numel(state.animal), numel(state.condition), numel(state.phase));
     assert(~isempty(state.files), 'no files queued for systemic metrics');
     specs = hrv_specs();
     seriesByFile = loadAllSeriesCached(state, specs, fullfile(pwd,'gemsplots_series_cache.mat'));
