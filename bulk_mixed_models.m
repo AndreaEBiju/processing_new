@@ -1,4 +1,4 @@
-function R = bulk_mixed_models(out, saveDir, logMetrics, includeSystemic)
+function R = bulk_mixed_models(out, saveDir, logMetrics, includeSystemic, includeDFA)
 % BULK_MIXED_MODELS  Mixed-effects test of the Mechanical x Electrical interaction
 % (synergy) for every metric, with animal as a random factor.
 %
@@ -9,6 +9,13 @@ function R = bulk_mixed_models(out, saveDir, logMetrics, includeSystemic)
 %       buildFileQueue state happens to exist in the current directory (that
 %       loader can pop its own interactive UI). Default true, unchanged for
 %       every pre-existing caller.
+%   R = bulk_mixed_models(out, saveDir, logMetrics, includeSystemic, false)
+%       also skip the DFA (dfa_alpha1/alpha2/alphaFull) metrics. Default
+%       true. Unlike the systemic HR/HRV metrics, DFA scalars are loaded
+%       via loadAllMetricsCached (one number per file, same mechanism
+%       plotAveragedMetrics.m uses) rather than loadAllSeriesCached, since
+%       there is no genuine windowed DFA series to average -- alpha1/
+%       alpha2/alphaFull are each a single whole-trial fit.
 %
 % MODEL
 %   Response y = per-recording baseline-normalized change of the metric,
@@ -49,6 +56,7 @@ function R = bulk_mixed_models(out, saveDir, logMetrics, includeSystemic)
         logMetrics = {'HRV','RMSSD','pNN5','SD1','SD2'};
     end
     if nargin < 4 || isempty(includeSystemic); includeSystemic = true; end
+    if nargin < 5 || isempty(includeDFA);       includeDFA       = true; end
     formats = {'png','svg','fig'};
     assert(license('test','Statistics_Toolbox') || exist('fitlme','file')==2, ...
         'bulk_mixed_models: needs the Statistics & Machine Learning Toolbox (fitlme).');
@@ -99,6 +107,26 @@ function R = bulk_mixed_models(out, saveDir, logMetrics, includeSystemic)
         else
             warning('bulk_mixed_models:sys', ...
                 'buildFileQueue/loadAllSeriesCached not on path -- systemic metrics skipped.');
+        end
+    end
+
+    % ---------------- DFA metrics (dfa_alpha1/alpha2/alphaFull) -------------
+    if includeDFA
+        haveDfaLoaders = exist('buildFileQueue','file')==2 && exist('loadAllMetricsCached','file')==2;
+        if haveDfaLoaders
+            try
+                Tdfa = build_dfa_tables();
+                for k = 1:numel(Tdfa)
+                    [s, c, hm] = fit_metric(Tdfa(k).T, Tdfa(k).label, 'dfa', false);
+                    summ{end+1} = s; cellRows = [cellRows; c]; %#ok<AGROW>
+                    maybe_plot(hm, s.metric, saveDir, formats, false);
+                end
+            catch ME
+                warning('bulk_mixed_models:dfa','DFA metrics skipped (%s)', ME.message);
+            end
+        else
+            warning('bulk_mixed_models:dfa', ...
+                'buildFileQueue/loadAllMetricsCached not on path -- DFA metrics skipped.');
         end
     end
 
@@ -287,6 +315,46 @@ function maybe_plot(hm, label, saveDir, formats, useLog)
     if ~isempty(saveDir) && exist('save_one_figure','file')==2
         save_one_figure(f, saveDir, ['mixedmodel_' regexprep(label,'[^\w]+','_')], formats);
     end
+end
+
+% ======================================================================
+function Tsys = build_dfa_tables()
+% Same baseline<->recovery pairing convention as build_systemic_tables, but
+% loaded via loadAllMetricsCached (one scalar per file, the same mechanism
+% plotAveragedMetrics.m uses) instead of loadAllSeriesCached, since
+% dfa_alpha1/alpha2/alphaFull have no windowed series to average -- each is
+% already a single whole-trial fit, so no series-mean step is needed here.
+    state = buildFileQueue(fullfile(pwd,'gemsplots_queue.mat'));
+    assert(~isempty(state.files), 'no files queued for DFA metrics');
+    specs = dfa_specs();
+    metricsCacheFile = fullfile(pwd,'gemsplots_metrics_cache.mat');
+    values = loadAllMetricsCached(state, specs, metricsCacheFile);
+    nM = numel(specs);
+    isBase = strcmpi(state.phase,'baseline'); isRec = strcmpi(state.phase,'recovery');
+    Tsys = struct('label',{},'T',{});
+    for k = 1:nM
+        y=[]; an={}; Mv=[]; Ev=[];
+        for r = find(isRec(:))'
+            a = state.animal{r}; c = state.condition{r};
+            % pair baseline<->recovery by (animal,condition), same convention as
+            % build_systemic_tables / compute_norm
+            cand = find(isBase(:)' & strcmpi(state.animal,a) & strcmpi(state.condition,c));
+            if isempty(cand); continue; end
+            bm = values(cand(1),k); rm = values(r,k);
+            if ~isfinite(bm)||~isfinite(rm)||bm==0; continue; end
+            [M,E]=parse_me(c);
+            y(end+1,1)=(rm-bm)/bm; an{end+1,1}=a; Mv(end+1,1)=M; Ev(end+1,1)=E; %#ok<AGROW>
+        end
+        Tsys(end+1) = struct('label',specs(k).label,'T',make_table(y,an,Mv,Ev)); %#ok<AGROW>
+    end
+end
+
+% ---- DFA metric specs (whole-trial scalars, no series) ----
+function specs = dfa_specs()
+    specs = [ ...
+      ms('DFA alpha1',    '_HRVMeasures.mat', 'dfa_alpha1',    ''); ...
+      ms('DFA alpha2',    '_HRVMeasures.mat', 'dfa_alpha2',    ''); ...
+      ms('DFA alphaFull', '_HRVMeasures.mat', 'dfa_alphaFull', '') ];
 end
 
 % ======================================================================
