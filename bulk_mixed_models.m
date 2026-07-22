@@ -332,8 +332,15 @@ function Tsys = build_dfa_tables()
     metricsCacheFile = fullfile(pwd,'gemsplots_metrics_cache.mat');
     values = loadAllMetricsCached(state, specs, metricsCacheFile);
     nM = numel(specs);
+    nF = size(values,1);
+    if nF ~= numel(state.files)
+        warning('build_dfa_tables:sizeMismatch', ...
+            'loadAllMetricsCached returned %d row(s) but state.files has %d -- check gemsplots_metrics_cache.mat for a stale/mismatched cache.', ...
+            nF, numel(state.files));
+    end
     isBase = strcmpi(state.phase,'baseline'); isRec = strcmpi(state.phase,'recovery');
     Tsys = struct('label',{},'T',{});
+    nSkippedOOB = 0;
     for k = 1:nM
         y=[]; an={}; Mv=[]; Ev=[];
         for r = find(isRec(:))'
@@ -342,12 +349,24 @@ function Tsys = build_dfa_tables()
             % build_systemic_tables / compute_norm
             cand = find(isBase(:)' & strcmpi(state.animal,a) & strcmpi(state.condition,c));
             if isempty(cand); continue; end
+            if r > nF || cand(1) > nF
+                nSkippedOOB = nSkippedOOB + 1;
+                if nSkippedOOB == 1
+                    warning('build_dfa_tables:oob', ...
+                        'Skipping out-of-range pairing (animal=%s, condition=%s): r=%d, cand(1)=%d, but values has only %d row(s) (numel(state.files)=%d). Further occurrences suppressed.', ...
+                        a, c, r, cand(1), nF, numel(state.files));
+                end
+                continue;
+            end
             bm = values(cand(1),k); rm = values(r,k);
             if ~isfinite(bm)||~isfinite(rm)||bm==0; continue; end
             [M,E]=parse_me(c);
             y(end+1,1)=(rm-bm)/bm; an{end+1,1}=a; Mv(end+1,1)=M; Ev(end+1,1)=E; %#ok<AGROW>
         end
         Tsys(end+1) = struct('label',specs(k).label,'T',make_table(y,an,Mv,Ev)); %#ok<AGROW>
+    end
+    if nSkippedOOB > 0
+        fprintf('[build_dfa_tables] %d pairing(s) skipped as out-of-range (see warning above).\n', nSkippedOOB);
     end
 end
 
@@ -422,6 +441,11 @@ function Tsys = build_systemic_tables()
     specs = hrv_specs();
     seriesByFile = loadAllSeriesCached(state, specs, fullfile(pwd,'gemsplots_series_cache.mat'));
     nF = numel(state.files); nM = numel(specs);
+    if size(seriesByFile,1) ~= nF
+        warning('build_systemic_tables:sizeMismatch', ...
+            'loadAllSeriesCached returned %d row(s) but state.files has %d -- check gemsplots_series_cache.mat for a stale/mismatched cache.', ...
+            size(seriesByFile,1), nF);
+    end
     fmean = nan(nF,nM);
     for i=1:nF
         for k=1:nM
@@ -431,6 +455,7 @@ function Tsys = build_systemic_tables()
     end
     isBase = strcmpi(state.phase,'baseline'); isRec = strcmpi(state.phase,'recovery');
     Tsys = struct('label',{},'T',{});
+    nSkippedOOB = 0;
     for k = 1:nM
         y=[]; an={}; Mv=[]; Ev=[];
         for r = find(isRec(:))'
@@ -439,12 +464,24 @@ function Tsys = build_systemic_tables()
             % compute_norm in plotSynergyHeatmaps / bulk_hrv_heatmaps
             cand = find(isBase(:)' & strcmpi(state.animal,a) & strcmpi(state.condition,c));
             if isempty(cand); continue; end
+            if r > nF || cand(1) > nF
+                nSkippedOOB = nSkippedOOB + 1;
+                if nSkippedOOB == 1
+                    warning('build_systemic_tables:oob', ...
+                        'Skipping out-of-range pairing (animal=%s, condition=%s): r=%d, cand(1)=%d, but fmean has only %d row(s) (numel(state.files)=%d). Further occurrences suppressed.', ...
+                        a, c, r, cand(1), nF, numel(state.files));
+                end
+                continue;
+            end
             bm = fmean(cand(1),k); rm = fmean(r,k);
             if ~isfinite(bm)||~isfinite(rm)||bm==0; continue; end
             [M,E]=parse_me(c);
             y(end+1,1)=(rm-bm)/bm; an{end+1,1}=a; Mv(end+1,1)=M; Ev(end+1,1)=E; %#ok<AGROW>
         end
         Tsys(end+1) = struct('label',specs(k).label,'T',make_table(y,an,Mv,Ev)); %#ok<AGROW>
+    end
+    if nSkippedOOB > 0
+        fprintf('[build_systemic_tables] %d pairing(s) skipped as out-of-range (see warning above).\n', nSkippedOOB);
     end
 end
 
