@@ -103,6 +103,7 @@ function R = bulk_mixed_models(out, saveDir, logMetrics, includeSystemic, includ
                 end
             catch ME
                 warning('bulk_mixed_models:sys','systemic metrics skipped (%s)', ME.message);
+                fprintf('%s\n', getReport(ME, 'extended', 'hyperlinks', 'off'));
             end
         else
             warning('bulk_mixed_models:sys', ...
@@ -123,6 +124,7 @@ function R = bulk_mixed_models(out, saveDir, logMetrics, includeSystemic, includ
                 end
             catch ME
                 warning('bulk_mixed_models:dfa','DFA metrics skipped (%s)', ME.message);
+                fprintf('%s\n', getReport(ME, 'extended', 'hyperlinks', 'off'));
             end
         else
             warning('bulk_mixed_models:dfa', ...
