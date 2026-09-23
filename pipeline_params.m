@@ -16,8 +16,21 @@ function P = pipeline_params()
                                    % (only needed for slow-wave phase-locking; off for now)
 
     % ---- Step 1: bandpass filter (the spike band) -------------------------
-    P.bandpassLow        = 100;    % Hz  high-pass corner (removes ECG/resp drift)
-    P.bandpassHigh       = 5000;   % Hz  low-pass corner (clamped to fs/2-1)
+    % A.5b: the ENG band is 300-3000 Hz, measured. Event energy reaches background
+    % by ~4 kHz, and narrowing from 5000 lowers sigma(T) by 24%, raises the event
+    % rate 41% and improves event-to-threshold separation. The low corner moves from
+    % 100 to 300 for the same reason - 100-300 Hz is where 32-65% of the QRS sits,
+    % so a 100 Hz corner puts the heartbeat inside the spike band.
+    %
+    % THIS BREAKS COMPARABILITY WITH PREVIOUSLY PROCESSED DATA. sigma changes, so the
+    % 4.5-sigma threshold changes, so every historical spike count and firing rate
+    % changes. Reprocess rather than mixing, and record the band alongside any result.
+    %
+    % It is also load-bearing for the per-consumer extents: if these corners disagree
+    % with the detector's ENG band, every extent is computed for a band the consumer
+    % does not analyse.
+    P.bandpassLow        = 300;    % Hz  high-pass corner (was 100; see A.5b)
+    P.bandpassHigh       = 3000;   % Hz  low-pass corner (was 5000; clamped to fs/2-1)
     P.filterOrder        = 4;      % Butterworth order (zero-phase via filtfilt)
 
     % ---- Step 1b: cardiac (QRS) template subtraction ---------------------
@@ -30,9 +43,30 @@ function P = pipeline_params()
                                    % (tracks slow QRS-shape drift; large K -> global)
 
     % ---- Step 2: noise estimate + validity mask --------------------------
-    P.sigmaWindowSec     = 5;      % sliding window length for robust noise sigma
+    % SIGMA REFERENCE. 'session' takes one Quian Quiroga sigma per channel for the
+    % whole recording; 'running' is the superseded 5 s sliding track, kept only so
+    % the two can be compared on a real file.
+    %
+    % Why this changed. The Quiroga estimator itself is correct and stays - std
+    % inflates 35% at 20 spk/s where Quiroga inflates 1.9%. But Quiroga still
+    % inflates 12% at 100 spk/s, and a 5 s window tracks that inflation. A post-stim
+    % firing-rate rise therefore RAISES the local 4.5-sigma threshold and suppresses
+    % detection of the very effect being measured. It is the same failure as the
+    % running baseline rejected in the detector (task 06) and the adaptive QRS
+    % threshold rejected in task 05: adaptive state contaminated by the signal it
+    % exists to measure.
+    %
+    % The window length below is now only the granularity of the diagnostic track
+    % and of the median that forms the session reference.
+    P.sigmaReference     = 'session';  % 'session' (fixed) | 'running' (superseded)
+    P.sigmaWindowSec     = 5;      % window length for the sigma track and its median
     P.sigmaStepFrac      = 0.5;    % window step as a fraction of the window (overlap)
-    P.edgeBufferMs       = 5;      % pad (ms) around invalid regions (filter ringing)
+    % Measured from impz on the actual design, at 1% of peak, rather than guessed.
+    % At the A.5b corners (300-3000 Hz, order 4, 24.4 kHz) the impulse response runs
+    % 5.1 ms, so the previous 5 ms was marginally SHORT - the buffer has to exceed
+    % the ringing it exists to hide, not match it. 10 ms is the measured value
+    % rounded up with headroom for the order-4 design at either corner.
+    P.edgeBufferMs       = 10;     % pad (ms) around invalid regions; measured impz 5.1 ms
     P.zeroRunMinSec      = 0.5;    % min duration (s) of a flat/dead run to flag invalid
     P.flatRangeFrac      = 0.05;   % dead if local range < this fraction of the
                                    % recording's typical local range (catches

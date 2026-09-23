@@ -157,12 +157,22 @@ function out = analyzeOneSignal(signal, fs, cutoff, order, folderpath, condition
     % ---------------- Signal preparation ----------------
     xFill = fillmissing(x, 'linear', 'EndValues', 'nearest');
 
-    % Filter commented out — using raw signal directly
-    % highFreqCutoff = cutoff / (fs/2);
-    % [z,p,k_]       = butter(order, highFreqCutoff, 'low');
-    % [sos,g]        = zp2sos(z, p, k_);
-    % yFilt          = filtfilt(sos, g, xFill);
-    yFilt = xFill;
+    % Deliberate 1-100 Hz band before findpeaks. This was commented out and the
+    % raw signal used instead; band-limiting alone takes RR error from 1.3% to 0.2%
+    % (gems-blanking-v2 task 05). The band is stated here rather than taken from the
+    % `cutoff` argument, because `cutoff` was an 8 Hz LOWPASS corner for a filter
+    % that has not run in some time and is not the band a QRS lives in.
+    %
+    % Edge transient: the measured impulse response of this design is 0.159 s to 1%
+    % of peak, against an edgeBufferSec of 0.75 s at the call site - covered 4.7x.
+    % MATLAB's filtfilt has no padtype option and always uses odd extension, so the
+    % edge buffer is the only defence; it is sufficient here. See the audit note in
+    % pipeline_params.m.
+    hrBandHz = [1 100];
+    hrBandHz(2) = min(hrBandHz(2), fs/2 - 1);
+    [z,p,k_] = butter(order, hrBandHz / (fs/2), 'bandpass');
+    [sos,g]  = zp2sos(z, p, k_);
+    yFilt    = filtfilt(sos, g, xFill);
 
     % Detrend on fully populated signal (no NaNs) for clean peak detection.
     % NaNs are reinserted afterward for display/bookkeeping only.
@@ -189,13 +199,38 @@ function out = analyzeOneSignal(signal, fs, cutoff, order, folderpath, condition
     % ---------------- RR intervals ----------------
     [RR_intervals, RR_times] = computeValidRRIntervals(heartlocs, invalidMask, fs);
 
+    RR_implausibleMask = false(0,1);
     if ~isempty(RR_intervals)
         minRR_sec              = 0.1;
         maxRR_sec              = 0.5;
         implausibleRR          = RR_intervals < minRR_sec | RR_intervals > maxRR_sec;
         RR_implausibleFraction = mean(implausibleRR);
+        RR_implausibleMask     = implausibleRR;
+
+        % PROMOTED FROM WARNING TO MASK.
+        %
+        % The heart is periodic and always present. An RR interval outside
+        % [100, 500] ms is not a rare physiological event at these rates - it is a
+        % missed beat or a false one, which means the trace there is contaminated.
+        % Leaving it in the series as a warning let a known-bad interval enter
+        % SDNN, RMSSD and every windowed metric, and warnings in a batch run are
+        % read by nobody.
+        %
+        % Excluded rather than repaired: the beat is not invented back (hard
+        % invariant 8), the interval is dropped and rrRuns then treats the hole as a
+        % run boundary, so no successive difference is taken across it either. The
+        % fraction is still reported for QC - it is now a measurement of how much was
+        % removed rather than a note about how much was kept.
+        if any(implausibleRR)
+            RR_intervals = RR_intervals(~implausibleRR);
+            RR_times     = RR_times(~implausibleRR);
+            fprintf(['%s: masked %.1f%% of RR intervals outside [%.0f, %.0f] ms ' ...
+                     '(%d of %d) — excluded from all HRV metrics.\n'], ...
+                conditionLabel, RR_implausibleFraction * 100, ...
+                minRR_sec*1000, maxRR_sec*1000, nnz(implausibleRR), numel(implausibleRR));
+        end
         if RR_implausibleFraction > 0.05
-            warning('%s: %.1f%% of RR intervals outside plausible range — check peak detection.', ...
+            warning('%s: %.1f%% of RR intervals were implausible — check peak detection.', ...
                 conditionLabel, RR_implausibleFraction * 100);
         end
     else
@@ -225,14 +260,26 @@ function out = analyzeOneSignal(signal, fs, cutoff, order, folderpath, condition
 
         br_locs_true = br_locs_true(~invalidMask(br_locs_true) & ~edgeMask(br_locs_true));
 
-        % Flag implausible breath intervals (do not discard)
+        % Implausible breath intervals: masked, not merely flagged. Same argument
+        % as the RR case above - breathing is periodic and always present, so a rate
+        % outside the plausible band is evidence of contamination rather than of
+        % unusual physiology. The LATER peak of each implausible pair is dropped,
+        % since the interval it closes is the one that cannot be trusted.
         if numel(br_locs_true) >= 2
             br_intervals_sec       = diff(br_locs_true) / fs;
             br_rate_hz             = 1 ./ br_intervals_sec;
             implausibleBreath      = br_rate_hz < minBreathRateHz | br_rate_hz > maxBreathRateHz;
             br_implausibleFraction = mean(implausibleBreath);
+            if any(implausibleBreath)
+                dropLater = [false; implausibleBreath(:)];
+                br_locs_true = br_locs_true(~dropLater);
+                fprintf(['%s: masked %.1f%% of breath intervals outside [%.2f, %.2f] Hz ' ...
+                         '(%d peaks removed).\n'], ...
+                    conditionLabel, br_implausibleFraction * 100, ...
+                    minBreathRateHz, maxBreathRateHz, nnz(dropLater));
+            end
             if br_implausibleFraction > 0.05
-                warning('%s: %.1f%% of breath intervals outside plausible range — check breath detection.', ...
+                warning('%s: %.1f%% of breath intervals were implausible — check breath detection.', ...
                     conditionLabel, br_implausibleFraction * 100);
             end
         end
@@ -249,7 +296,8 @@ function out = analyzeOneSignal(signal, fs, cutoff, order, folderpath, condition
     hrMinPeaksInStretch = 3;
 
     [metrics_t, heartRateSeries, heartCountSeries, hrv_series, rmssd_series, pnn5_series, ...
-        sd1_series, sd2_series, sampEn_series, nRR_used, breathRateSeries] = ...
+        sd1_series, sd2_series, sampEn_series, nRR_used, breathRateSeries, ...
+        heartCountValidSec, heartCountRateSeries] = ...
         movingCardiacMetrics(heartPeakTrain, RR_intervals, RR_times, ...
             br_locs_true, invalidMask, edgeMask, fs, winSec, hrBrWinSec, stepSec, minRR, ...
             brMinStretchSec, brMinPeaksInStretch, minBreathRate_bpm, maxBreathRate_bpm, ...
@@ -258,6 +306,10 @@ function out = analyzeOneSignal(signal, fs, cutoff, order, folderpath, condition
     avgHeartRate       = mean(heartRateSeries,  'omitnan');
     avgBreathRate      = mean(breathRateSeries, 'omitnan');
     avgHeartCount      = mean(heartCountSeries, 'omitnan');
+    % The count on its valid-duration denominator. avgHeartCount is retained for
+    % continuity with stored results but is biased low wherever a window was partly
+    % blanked; avgHeartCountRate is the one to use.
+    avgHeartCountRate  = mean(heartCountRateSeries, 'omitnan');
 
     fprintf('%s Heart Rate (centered %ds window):  %.2f bpm\n', ...
         conditionLabel, hrBrWinSec, avgHeartRate);
@@ -272,22 +324,27 @@ function out = analyzeOneSignal(signal, fs, cutoff, order, folderpath, condition
         sd1    = NaN;   sd2    = NaN;
         sampEn = NaN;   appxEn = NaN;
     else
-        hrv    = std(RR_intervals, 'omitnan');
-        diffRR = diff(RR_intervals);
-        rmssd  = sqrt(mean(diffRR.^2, 'omitnan'));
+        % Runs-aware: a successive difference is only taken between two intervals
+        % that are genuinely adjacent in time. diff() over the concatenated series
+        % crossed every blanked gap, and because blanking removes beats the
+        % gap-spanning interval is long - so RMSSD, pNN5 and SD1 were inflated in
+        % proportion to how much had been blanked, and a better detector scored
+        % worse. The runs list already existed in dfaRR_gapAware.m and was never
+        % propagated here; it now lives in rrRuns.m and both callers use it.
+        hrvOut = hrvRunsAware(RR_intervals, RR_times, pipeline_params());
 
-        absdiffRR    = abs(diff(RR_intervals .* 1000));
-        count_over_5 = sum(absdiffRR > 5, 'omitnan');
-        pnn5         = (count_over_5 / numel(absdiffRR)) * 100;
+        hrv    = hrvOut.hrv;
+        rmssd  = hrvOut.rmssd;
+        pnn5   = hrvOut.pnn5;
+        sd1    = hrvOut.sd1;
+        sd2    = hrvOut.sd2;
+        sampEn = hrvOut.sampEn;
+        appxEn = hrvOut.appxEn;
 
-        sd1 = sqrt(0.5) * std(diffRR, 'omitnan');
-        sd2 = sqrt(max(0, 2*hrv^2 - sd1^2));
-
-        sampEn = sampleEntropy(RR_intervals);
-        appxEn = approximateEntropy(RR_intervals);
-
-        fprintf('%s HRV: %.4f s  RMSSD: %.4f s  pNN5: %.2f%%  SD1: %.4f  SD2: %.4f\n', ...
-            conditionLabel, hrv, rmssd, pnn5, sd1, sd2);
+        fprintf(['%s HRV: %.4f s  RMSSD: %.4f s  pNN5: %.2f%%  SD1: %.4f  ' ...
+                 'SD2: %.4f  [%d runs, %d diffs used, %d spliced diffs refused]\n'], ...
+            conditionLabel, hrv, rmssd, pnn5, sd1, sd2, ...
+            hrvOut.nRuns, hrvOut.nUsedDiffs, hrvOut.nSplicedDiffs);
     end
 
     % ---------------- Gap-aware DFA (fractal scaling) ----------------
@@ -477,8 +534,9 @@ function out = analyzeOneSignal(signal, fs, cutoff, order, folderpath, condition
         'chanidx', 'heartBeatSeries', 'heartlocs', ...
         'heartRateSeries', 'avgHeartRate', ...
         'heartCountSeries', 'avgHeartCount', ...
+        'heartCountValidSec', 'heartCountRateSeries', 'avgHeartCountRate', ...
         'breathRateSeries', 'avgBreathRate', ...
-        'br_locs_true', 'br_implausibleFraction', ...
+        'br_locs_true', 'br_implausibleFraction', 'RR_implausibleMask', ...
         'invalidMask', 'edgeMask', 'blankIdx', 'edgeBufferSec', ...
         'metrics_t', 't', 'winSec', 'hrBrWinSec', 'stepSec', ...
         'brMinStretchSec', 'brMinPeaksInStretch', ...
@@ -514,6 +572,9 @@ function out = analyzeOneSignal(signal, fs, cutoff, order, folderpath, condition
     out.heartRateSeries        = heartRateSeries;
     out.avgHeartRate           = avgHeartRate;
     out.heartCountSeries       = heartCountSeries;
+    out.heartCountValidSec     = heartCountValidSec;
+    out.heartCountRateSeries   = heartCountRateSeries;
+    out.avgHeartCountRate      = avgHeartCountRate;
     out.avgHeartCount          = avgHeartCount;
     out.breathRateSeries       = breathRateSeries;
     out.avgBreathRate          = avgBreathRate;
@@ -564,7 +625,8 @@ end
 
 % =========================================================================
 function [metrics_t, heartRateSeries, heartCountSeries, hrv_series, rmssd_series, pnn5_series, ...
-    sd1_series, sd2_series, sampEn_series, nRR_used, breathRateSeries] = ...
+    sd1_series, sd2_series, sampEn_series, nRR_used, breathRateSeries, ...
+    heartCountValidSec, heartCountRateSeries] = ...
     movingCardiacMetrics(heartPeakTrain, RR_intervals, RR_times, ...
         br_locs_true, invalidMask, edgeMask, fs, winSec, hrBrWinSec, stepSec, minRR, ...
         brMinStretchSec, brMinPeaksInStretch, minBreathRate_bpm, maxBreathRate_bpm, ...
@@ -598,6 +660,12 @@ function [metrics_t, heartRateSeries, heartCountSeries, hrv_series, rmssd_series
 
     heartRateSeries  = NaN(nT, 1);
     heartCountSeries = NaN(nT, 1);
+    % Valid seconds behind each count, and the count expressed as a rate on that
+    % denominator. Both emitted: the raw count keeps continuity with stored results,
+    % the rate is the number any analysis should actually use.
+    heartCountValidSec   = NaN(nT, 1);
+    heartCountRateSeries = NaN(nT, 1);
+    minValidFracForCount = 0.5;
     hrv_series       = NaN(nT, 1);
     rmssd_series     = NaN(nT, 1);
     pnn5_series      = NaN(nT, 1);
@@ -673,28 +741,45 @@ function [metrics_t, heartRateSeries, heartCountSeries, hrv_series, rmssd_series
             idx0w = max(1, round(t0w * fs) + 1);
             idx1w = min(N, round(t1w * fs) + 1);
 
-            % Heart beats per user-provided window: literal count over the
-            % full centered window. heartPeakTrain zeros out invalid samples
-            % so blanked portions contribute zero.
+            % Heart beats per window, on a VALID-DURATION denominator.
+            %
+            % heartPeakTrain zeros out invalid samples, so a blanked portion of the
+            % window contributes no beats - but the count was previously reported
+            % against the full window length regardless. A window half of which is
+            % blanked therefore reported half the beat count as though the heart had
+            % slowed, and the more precisely the detector blanks, the more of these
+            % appear. That is the same defect as every other row here: the
+            % instrument penalises better blanking.
+            %
+            % The raw count is kept for continuity and the rate is now reported
+            % separately, scaled to the valid seconds actually observed. A window
+            % with too little valid data reports NaN rather than a number scaled up
+            % from almost nothing.
+            winValidSec = nnz(~invalidMask(idx0w:idx1w)) / fs;
             heartCountSeries(i) = sum(heartPeakTrain(idx0w:idx1w));
+            heartCountValidSec(i) = winValidSec;
+            if winValidSec >= minValidFracForCount * (idx1w - idx0w + 1) / fs
+                heartCountRateSeries(i) = heartCountSeries(i) / (winValidSec / 60);
+            end
 
             % HRV metrics: RR intervals whose start time is within the window.
             keep        = RR_times >= t0w & RR_times <= t1w;
             nRR_used(i) = sum(keep);
             if nRR_used(i) >= minRR
                 RR_win  = RR_intervals(keep);
-                diffRR  = diff(RR_win);
-                hrv_val = std(RR_win, 'omitnan');
+                % Runs-aware here too: this windowed path had the same splice as the
+                % whole-record one, differencing across every blanked gap inside the
+                % window. rrRuns/hrvRunsAware is the single definition.
+                hv = hrvRunsAware(RR_win, RR_times(keep), pipeline_params());
+                hrv_val = hv.hrv;
 
                 hrv_series(i)   = hrv_val;
-                rmssd_series(i) = sqrt(mean(diffRR.^2, 'omitnan'));
+                rmssd_series(i) = hv.rmssd;
+                pnn5_series(i)  = hv.pnn5;
 
-                absdiffRR      = abs(diffRR * 1000);
-                pnn5_series(i) = (sum(absdiffRR > 5, 'omitnan') / numel(absdiffRR)) * 100;
-
-                sd1_val        = sqrt(0.5) * std(diffRR, 'omitnan');
+                sd1_val        = hv.sd1;
                 sd1_series(i)  = sd1_val;
-                sd2_series(i)  = sqrt(max(0, 2 * hrv_val^2 - sd1_val^2));
+                sd2_series(i)  = hv.sd2;
             end
         end
 

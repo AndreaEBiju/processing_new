@@ -236,20 +236,36 @@ function out = analyzeOneSignal(signal, lowPassOn, lowPassCutoff, lowPassOrder, 
             winEndSamp   = min(N, ctrSamp + halfWinSamp);
 
             winClean = cleanMask(winStartSamp:winEndSamp);
-            [stretchLen, stretchStart] = longestContiguousRun(winClean);
 
-            if stretchLen < minStretchSamp
+            % Pool every clean run in the window, not just the longest one.
+            % Taking only the longest discards real data and does so in a way that
+            % penalises better blanking: two clean 28 s halves of a 60 s window each
+            % fall under the 30 s minimum, so the window returns NaN even though 56 s
+            % of it is clean. A detector that cuts one precise 4 s gap therefore
+            % scores worse than one that misses the artifact entirely.
+            %
+            % Pooling is the same treatment dfaGapAware.m already gives RR runs:
+            % count peaks over the union of clean runs and divide by their total
+            % duration. The minimum-duration and minimum-peak gates now apply to the
+            % pooled total rather than to any single run.
+            runs = contiguousRuns(winClean);
+
+            pooledLen   = 0;
+            pooledPeaks = 0;
+            for rr = 1:size(runs, 1)
+                absStart = winStartSamp + runs(rr,1) - 1;
+                absEnd   = min(N, winStartSamp + runs(rr,2) - 1);
+                pooledLen   = pooledLen + (absEnd - absStart + 1);
+                pooledPeaks = pooledPeaks + sum(locs >= absStart & locs <= absEnd);
+            end
+
+            if pooledLen < minStretchSamp
                 continue;
             end
 
-            absStart = winStartSamp + stretchStart - 1;
-            absEnd   = min(N, absStart + stretchLen - 1);
-
-            peaksInStretch = locs(locs >= absStart & locs <= absEnd);
-
-            if numel(peaksInStretch) >= minPeaksInStretch
-                stretchDurSec = stretchLen / fs;
-                slowWaveRateSeries(ti, ci) = numel(peaksInStretch) / (stretchDurSec / 60);
+            if pooledPeaks >= minPeaksInStretch
+                stretchDurSec = pooledLen / fs;
+                slowWaveRateSeries(ti, ci) = pooledPeaks / (stretchDurSec / 60);
             end
         end
 
@@ -342,6 +358,8 @@ end
 % =========================================================================
 function [runLen, runStart] = longestContiguousRun(binaryVec)
 % Find length and 1-based start index of the longest contiguous run of true values.
+% Retained for callers that genuinely want the single longest run; the slow wave
+% rate now pools every run instead - see contiguousRuns below.
     if ~any(binaryVec)
         runLen = 0; runStart = 0; return;
     end
@@ -351,6 +369,25 @@ function [runLen, runStart] = longestContiguousRun(binaryVec)
     lengths = ends - starts + 1;
     [runLen, idx] = max(lengths);
     runStart = starts(idx);
+end
+
+
+% =========================================================================
+function runs = contiguousRuns(binaryVec)
+% All contiguous runs of true values, as [nRuns x 2] of 1-based [start, end].
+% Empty [0 x 2] when there are none.
+%
+% Pooling every run rather than keeping the longest is what stops precise blanking
+% from being punished: two clean 28 s halves of a 60 s window are 56 s of usable
+% data, and reporting NaN for that window because neither half reaches 30 s throws
+% away the recording to protect a threshold.
+    if ~any(binaryVec)
+        runs = zeros(0, 2); return;
+    end
+    d      = diff([0; binaryVec(:); 0]);
+    starts = find(d ==  1);
+    ends   = find(d == -1) - 1;
+    runs   = [starts, ends];
 end
 
 

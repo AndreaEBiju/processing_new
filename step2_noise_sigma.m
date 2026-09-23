@@ -59,8 +59,10 @@ function D = step2_noise_sigma(D, P, plotMode)
     cWinAll     = cell(1, nCh);
     medSigma    = nan(1, nCh);
 
-    fprintf('[step2] Noise sigma: %.1f s windows (%.0f%% overlap), MAD estimator.\n', ...
-        P.sigmaWindowSec, 100 * (1 - P.sigmaStepFrac));
+    if isfield(P, 'sigmaReference'); sigRef = P.sigmaReference; else; sigRef = 'session'; end
+    fprintf(['[step2] Noise sigma: %s reference, %.1f s windows (%.0f%% overlap), ' ...
+             'Quian Quiroga MAD estimator.\n'], ...
+        sigRef, P.sigmaWindowSec, 100 * (1 - P.sigmaStepFrac));
 
     for k = 1:nCh
         xraw = D.y(:, ch(k));
@@ -96,9 +98,21 @@ function D = step2_noise_sigma(D, P, plotMode)
             cWin(w) = (i0 + i1) / 2;
         end
 
-        % --- build per-sample sigma track ---
+        % --- build the sigma track ---
+        % 'session': ONE sigma for the whole recording, the median of the valid
+        % window estimates. Fixed and stateless, so a firing-rate change cannot move
+        % the threshold. The median across windows rather than a global MAD over all
+        % samples, because a contiguous contaminated stretch inflates the windows it
+        % lands in and the median across ~240 of them discards those outright.
+        %
+        % 'running': the superseded 5 s interpolated track. Retained only so the two
+        % can be compared on a real recording; see P.sigmaReference.
         good = isfinite(sigWin) & sigWin > 0;
-        if nnz(good) >= 2
+        useSession = ~isfield(P, 'sigmaReference') || strcmpi(P.sigmaReference, 'session');
+
+        if useSession && nnz(good) >= 1
+            sig = repmat(median(sigWin(good)), N, 1);
+        elseif nnz(good) >= 2
             sig = interp1(cWin(good), sigWin(good), (1:N)', 'linear');
             sig = fillmissing(sig, 'nearest');          % extend to ends
         elseif nnz(good) == 1
@@ -129,8 +143,10 @@ function D = step2_noise_sigma(D, P, plotMode)
 
     D.sigmaWin  = struct('centers', {cWinAll}, 'sigma', {sigWinAll}, ...
                          'windowSec', P.sigmaWindowSec, 'stepFrac', P.sigmaStepFrac);
+    if isfield(P, 'sigmaReference'); sigRef = P.sigmaReference; else; sigRef = 'session'; end
     D.noiseInfo = struct('windowSec', P.sigmaWindowSec, 'edgeBufferMs', P.edgeBufferMs, ...
                          'zeroRunMinSec', P.zeroRunMinSec, 'threshSigma', P.threshSigma, ...
+                         'sigmaReference', sigRef, ...
                          'medianSigma_uV', medSigma * 1e6);
 
     if plotMode

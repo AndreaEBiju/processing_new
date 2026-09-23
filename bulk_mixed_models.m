@@ -177,8 +177,32 @@ function [s, cells, hm] = fit_metric(T, label, source, useLog)
         T = T(keep, :);
         T.y = log(1 + T.y);
     end
+    % ---- coverage: exclusion, weight, covariate -------------------------
+    % Three separate jobs and all three are needed.
+    %   exclusion : a recording with almost nothing left is not a measurement
+    %   weight    : a 95%-covered recording deserves more say than a 40% one
+    %   covariate : coverage correlates with condition, so leaving it out lets a
+    %               coverage effect be read as a stimulation effect
+    minCoverage   = 0.5;
+    hasCoverage   = ismember('coverage', T.Properties.VariableNames) && any(isfinite(T.coverage));
+    nDroppedCover = 0;
+    if hasCoverage
+        drop = isfinite(T.coverage) & T.coverage < minCoverage;
+        nDroppedCover = nnz(drop);
+        T = T(~drop, :);
+    else
+        warning('bulk_mixed_models:noCoverage', ...
+            ['%s: no coverage on the compiled rows, so no weighting, no covariate ' ...
+             'and no minimum-coverage exclusion. nRR_used / fr_validFrac / ' ...
+             'validDur_s are computed upstream but are not reaching bulk_compile - ' ...
+             'task 19 cannot test the coverage confound until they do.'], label);
+    end
+
     s = struct('metric',label,'source',source,'method','-','nObs',height(T), ...
-        'nAnimals',numel(unique(T.animal)),'statName','-','stat',NaN,'df',NaN,'pInteraction',NaN);
+        'nAnimals',numel(unique(T.animal)),'statName','-','stat',NaN,'df',NaN, ...
+        'pInteraction',NaN,'hasCoverage',hasCoverage,'nDroppedCoverage',nDroppedCover, ...
+        'medCoverage',NaN);
+    if hasCoverage; s.medCoverage = median(T.coverage, 'omitnan'); end
     if height(T) < 6 || numel(unique(T.animal)) < 3
         warning('bulk_mixed_models:tooFew','%s: too few observations (%d) -- skipped.', label, height(T));
         return;
@@ -198,8 +222,26 @@ function [s, cells, hm] = fit_metric(T, label, source, useLog)
         return;
     end
 
-    fixedRed  = ['y ~ -1 + ' strjoin(main,' + ')];
+    % Coverage enters BOTH models as a covariate, so the interaction test is a
+    % comparison at matched coverage rather than one that can be satisfied by it.
+    covTerm = '';
+    if hasCoverage && numel(unique(T.coverage(isfinite(T.coverage)))) > 1
+        T.coverage = fillmissing(T.coverage, 'constant', median(T.coverage, 'omitnan'));
+        covTerm = ' + coverage';
+    end
+
+    fixedRed  = ['y ~ -1 + ' strjoin(main,' + ') covTerm];
     fixedFull = [fixedRed ' + ' strjoin(inter,' + ')];
+
+    % Weights: coverage, so a barely-covered recording cannot outvote a clean one.
+    % Linear in coverage rather than in its square, because the variance of a
+    % baseline-normalised scalar goes roughly as 1/duration.
+    if hasCoverage
+        wts = T.coverage;
+        wts(~isfinite(wts) | wts <= 0) = eps;
+    else
+        wts = ones(height(T), 1);
+    end
 
     % random effect identifiable only with >=2 obs per animal
     obsPer = groupcounts_local(T.animal);
@@ -207,8 +249,8 @@ function [s, cells, hm] = fit_metric(T, label, source, useLog)
 
     try
         if useRand
-            lmeFull = fitlme(T, [fixedFull ' + (1|animal)'], 'FitMethod','ML');
-            lmeRed  = fitlme(T, [fixedRed  ' + (1|animal)'], 'FitMethod','ML');
+            lmeFull = fitlme(T, [fixedFull ' + (1|animal)'], 'FitMethod','ML', 'Weights', wts);
+            lmeRed  = fitlme(T, [fixedRed  ' + (1|animal)'], 'FitMethod','ML', 'Weights', wts);
             cmp = compare(lmeRed, lmeFull);   % theoretical LRT
             s.method='LME'; s.statName='chi2'; s.stat=cmp.LRStat(2);
             s.df=cmp.deltaDF(2); s.pInteraction=cmp.pValue(2);
@@ -216,7 +258,7 @@ function [s, cells, hm] = fit_metric(T, label, source, useLog)
             CoefName = lmeFull.CoefficientNames; Est = lmeFull.Coefficients.Estimate;
             SE = lmeFull.Coefficients.SE; PV = lmeFull.Coefficients.pValue;
         else
-            lmFull = fitlm(T, fixedFull);
+            lmFull = fitlm(T, fixedFull, 'Weights', wts);
             cn = lmFull.CoefficientNames; isI = contains(cn, ':');
             L = zeros(sum(isI), numel(cn)); ii = find(isI);
             for q=1:numel(ii); L(q, ii(q)) = 1; end
@@ -392,14 +434,15 @@ function T = build_nerve_table(normRows, metric, channel)
 % animal parsed by parse_stem -- exactly the numbers every box/violin and
 % heatmap uses. y = scalar.(metric) = (mean recovery - mean baseline)/mean baseline.
     sel = find(strcmpi({normRows.label}, channel));
-    y=[]; an={}; Mv=[]; Ev=[];
+    y=[]; an={}; Mv=[]; Ev=[]; cv=[];
     for i = sel(:)'
         if ~isfield(normRows(i).scalar, metric); continue; end
         v = normRows(i).scalar.(metric); if ~isfinite(v); continue; end
         [M,E] = parse_me(normRows(i).condition);
         y(end+1,1)=v; an{end+1,1}=normRows(i).animal; Mv(end+1,1)=M; Ev(end+1,1)=E; %#ok<AGROW>
+        cv(end+1,1)=coverage_of(normRows(i)); %#ok<AGROW>
     end
-    T = make_table(y, an, Mv, Ev);
+    T = make_table(y, an, Mv, Ev, cv);
 end
 
 % ======================================================================
@@ -501,11 +544,45 @@ function Tsys = build_systemic_tables()
 end
 
 % ======================================================================
-function T = make_table(y, an, Mv, Ev)
+function T = make_table(y, an, Mv, Ev, cov)
     % animal already parsed/canonicalised upstream (parse_stem -> lowercase letter)
     T = table(y(:), categorical(cellstr(string(an(:)))), 'VariableNames', {'y','animal'});
     T.m10  = double(Mv(:)==10);  T.m50  = double(Mv(:)==50);  T.m100  = double(Mv(:)==100);
     T.e10  = double(Ev(:)==10);  T.e100 = double(Ev(:)==100); T.e1000 = double(Ev(:)==1000);
+
+    % Coverage: the fraction of each recording that survived blanking. NaN where
+    % the upstream row did not carry it. See fit_metric for what is done with it.
+    if nargin < 5 || isempty(cov)
+        T.coverage = NaN(height(T), 1);
+    else
+        T.coverage = cov(:);
+    end
+end
+
+% ======================================================================
+function cov = coverage_of(row)
+% Coverage for one compiled row, in [0, 1], or NaN when the row does not carry it.
+%
+% nRR_used, fr_validFrac and validDur_s are all computed upstream (step6_spike_report
+% and HR_BR_HRVAnalysis_new) and none of them reached the models. A recording that
+% was 60% blanked contributes the same weight as one that was 2% blanked, and - the
+% part that matters for task 19 - coverage is not independent of condition, because
+% the conditions with the most motion are the ones with the most blanking. An
+% uncorrected model therefore cannot separate a stimulation effect from a coverage
+% effect, which is precisely the confound task 19 exists to test for.
+%
+% Preference order: an explicit validFrac, else validDur_s over the record duration.
+    cov = NaN;
+    if ~isstruct(row); return; end
+    if isfield(row, 'coverage') && isfinite(row.coverage)
+        cov = row.coverage;
+    elseif isfield(row, 'fr_validFrac') && ~isempty(row.fr_validFrac)
+        cov = mean(row.fr_validFrac(:), 'omitnan');
+    elseif isfield(row, 'validDur_s') && isfield(row, 'durSec') && ...
+            isfinite(row.validDur_s) && row.durSec > 0
+        cov = row.validDur_s / row.durSec;
+    end
+    if isfinite(cov); cov = min(max(cov, 0), 1); end
 end
 
 function c = prod_col(T, name)

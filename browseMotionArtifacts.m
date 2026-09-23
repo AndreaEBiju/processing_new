@@ -31,7 +31,11 @@ function [stimSegments, recoverySegments, stimOut, recoveryOut, stimIdx, recover
 
     switch mode
         case "single"
-            validateattributes(data, {'numeric'}, {'2d','nonempty','real','finite'});
+            % 'finite' removed: an already-blanked file is NaN by construction
+            % (hard invariant 1 - masked samples are NaN, never 0), so requiring
+            % finite made it impossible to re-browse exactly the files most worth
+            % re-browsing. The other attributes still hold.
+            validateattributes(data, {'numeric'}, {'2d','nonempty','real'});
             [stimSegments, stimOut, stimIdx, stimHRChanIdx] = browseOneSignal( ...
                 data, fs, winSec, 'Signal', ...
                 [baseFileName '_segments.mat'], ...
